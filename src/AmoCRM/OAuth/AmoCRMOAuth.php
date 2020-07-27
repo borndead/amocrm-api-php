@@ -16,6 +16,7 @@ use AmoCRM\Exceptions\BadTypeException;
 use AmoCRM\OAuth2\Client\Provider\AmoCRM;
 use Exception;
 use Fig\Http\Message\StatusCodeInterface;
+use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
@@ -105,14 +106,20 @@ class AmoCRMOAuth
             'redirectUri' => $redirectUri,
             'timeout' => self::REQUEST_TIMEOUT,
         ];
+        $collaborators = [];
         if ($logger && $formatter && $logLevel) {
             $stack = HandlerStack::create();
             $stack->push(
                 Middleware::log($logger, $formatter, $logLevel)
             );
-            $options['handler'] = $stack;
+            $collaborators['httpClient'] = new Client(
+                [
+                    'handler' => $stack,
+                    'timeout' => self::REQUEST_TIMEOUT,
+                ]
+            );
         }
-        $this->oauthProvider = new AmoCRM($options);
+        $this->oauthProvider = new AmoCRM($options, $collaborators);
 
         $this->clientId = $clientId;
         $this->clientSecret = $clientSecret;
