@@ -3,23 +3,24 @@
 namespace AmoCRM\Client;
 
 use AmoCRM\AmoCRM\EntitiesServices\Products;
-use AmoCRM\EntitiesServices\Calls;
-use AmoCRM\EntitiesServices\Customers\Transactions;
-use AmoCRM\EntitiesServices\Leads\LossReasons;
-use AmoCRM\EntitiesServices\Leads\Pipelines;
-use AmoCRM\EntitiesServices\Leads\Statuses;
 use AmoCRM\EntitiesServices\Account;
+use AmoCRM\EntitiesServices\Calls;
 use AmoCRM\EntitiesServices\CatalogElements;
 use AmoCRM\EntitiesServices\Catalogs;
 use AmoCRM\EntitiesServices\Companies;
 use AmoCRM\EntitiesServices\Contacts;
 use AmoCRM\EntitiesServices\Customers\Customers;
+use AmoCRM\EntitiesServices\Customers\Statuses as CustomersStatuses;
+use AmoCRM\EntitiesServices\Customers\Transactions;
 use AmoCRM\EntitiesServices\CustomFieldGroups;
 use AmoCRM\EntitiesServices\CustomFields;
 use AmoCRM\EntitiesServices\EntityNotes;
 use AmoCRM\EntitiesServices\EntityTags;
 use AmoCRM\EntitiesServices\Events;
 use AmoCRM\EntitiesServices\Leads;
+use AmoCRM\EntitiesServices\Leads\LossReasons;
+use AmoCRM\EntitiesServices\Leads\Pipelines;
+use AmoCRM\EntitiesServices\Leads\Statuses;
 use AmoCRM\EntitiesServices\Roles;
 use AmoCRM\EntitiesServices\Segments;
 use AmoCRM\EntitiesServices\ShortLinks;
@@ -31,9 +32,10 @@ use AmoCRM\EntitiesServices\Widgets;
 use AmoCRM\Exceptions\InvalidArgumentException;
 use AmoCRM\Helpers\EntityTypesInterface;
 use AmoCRM\OAuth\AmoCRMOAuth;
+use GuzzleHttp\MessageFormatter;
 use League\OAuth2\Client\Token\AccessToken;
-use AmoCRM\EntitiesServices\Customers\Statuses as CustomersStatuses;
-
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
 use function is_callable;
 
 /**
@@ -69,10 +71,19 @@ class AmoCRMApiClient
      * @param string $clientId
      * @param string $clientSecret
      * @param string $redirectUri
+     * @param LoggerInterface|null $logger
+     * @param MessageFormatter|null $formatter
+     * @param string $logLevel
      */
-    public function __construct(string $clientId, string $clientSecret, string $redirectUri)
-    {
-        $this->oAuthClient = new AmoCRMOAuth($clientId, $clientSecret, $redirectUri);
+    public function __construct(
+        string $clientId,
+        string $clientSecret,
+        string $redirectUri,
+        LoggerInterface $logger = null,
+        MessageFormatter $formatter = null,
+        $logLevel = LogLevel::INFO
+    ) {
+        $this->oAuthClient = new AmoCRMOAuth($clientId, $clientSecret, $redirectUri, $logger, $formatter, $logLevel);
     }
 
     /**
@@ -420,6 +431,7 @@ class AmoCRMApiClient
         if (!is_null($pipelineId)) {
             $service->setEntityId($pipelineId);
         }
+
         return $service;
     }
 
@@ -515,7 +527,7 @@ class AmoCRMApiClient
     {
         $request = $this->buildRequest();
 
-        return  new Products($request);
+        return new Products($request);
     }
 
     /**

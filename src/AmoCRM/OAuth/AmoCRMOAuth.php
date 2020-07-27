@@ -20,6 +20,9 @@ use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Exception\TooManyRedirectsException;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\MessageFormatter;
+use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Uri;
 use Lcobucci\JWT\Parser;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
@@ -31,6 +34,8 @@ use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use League\OAuth2\Client\Provider\ResourceOwnerInterface;
 use League\OAuth2\Client\Token\AccessToken;
 use League\OAuth2\Client\Token\AccessTokenInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
 
 /**
  * Class AmoCRMOAuth
@@ -82,17 +87,32 @@ class AmoCRMOAuth
      * @param string $clientId
      * @param string $clientSecret
      * @param string $redirectUri
+     * @param LoggerInterface|null $logger
+     * @param MessageFormatter|null $formatter
+     * @param string $logLevel
      */
-    public function __construct(string $clientId, string $clientSecret, string $redirectUri)
-    {
-        $this->oauthProvider = new AmoCRM(
-            [
-                'clientId' => $clientId,
-                'clientSecret' => $clientSecret,
-                'redirectUri' => $redirectUri,
-                'timeout' => self::REQUEST_TIMEOUT,
-            ]
-        );
+    public function __construct(
+        string $clientId,
+        string $clientSecret,
+        string $redirectUri,
+        LoggerInterface $logger = null,
+        MessageFormatter $formatter = null,
+        $logLevel = LogLevel::INFO
+    ) {
+        $options = [
+            'clientId' => $clientId,
+            'clientSecret' => $clientSecret,
+            'redirectUri' => $redirectUri,
+            'timeout' => self::REQUEST_TIMEOUT,
+        ];
+        if ($logger && $formatter && $logLevel) {
+            $stack = HandlerStack::create();
+            $stack->push(
+                Middleware::log($logger, $formatter, $logLevel)
+            );
+            $options['handler'] = $stack;
+        }
+        $this->oauthProvider = new AmoCRM($options);
 
         $this->clientId = $clientId;
         $this->clientSecret = $clientSecret;
