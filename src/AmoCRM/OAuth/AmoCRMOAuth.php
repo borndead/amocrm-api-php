@@ -107,8 +107,12 @@ class AmoCRMOAuth
             'timeout' => self::REQUEST_TIMEOUT,
         ];
         $collaborators = [];
-        if ($logger && $formatter && $logLevel) {
+        if ($logger) {
             $stack = HandlerStack::create();
+            if (!$formatter)
+            {
+                $formatter = new MessageFormatter();
+            }
             $stack->push(
                 Middleware::log($logger, $formatter, $logLevel)
             );
