@@ -3,24 +3,23 @@
 namespace AmoCRM\Client;
 
 use AmoCRM\AmoCRM\EntitiesServices\Products;
-use AmoCRM\EntitiesServices\Account;
 use AmoCRM\EntitiesServices\Calls;
+use AmoCRM\EntitiesServices\Customers\Transactions;
+use AmoCRM\EntitiesServices\Leads\LossReasons;
+use AmoCRM\EntitiesServices\Leads\Pipelines;
+use AmoCRM\EntitiesServices\Leads\Statuses;
+use AmoCRM\EntitiesServices\Account;
 use AmoCRM\EntitiesServices\CatalogElements;
 use AmoCRM\EntitiesServices\Catalogs;
 use AmoCRM\EntitiesServices\Companies;
 use AmoCRM\EntitiesServices\Contacts;
 use AmoCRM\EntitiesServices\Customers\Customers;
-use AmoCRM\EntitiesServices\Customers\Statuses as CustomersStatuses;
-use AmoCRM\EntitiesServices\Customers\Transactions;
 use AmoCRM\EntitiesServices\CustomFieldGroups;
 use AmoCRM\EntitiesServices\CustomFields;
 use AmoCRM\EntitiesServices\EntityNotes;
 use AmoCRM\EntitiesServices\EntityTags;
 use AmoCRM\EntitiesServices\Events;
 use AmoCRM\EntitiesServices\Leads;
-use AmoCRM\EntitiesServices\Leads\LossReasons;
-use AmoCRM\EntitiesServices\Leads\Pipelines;
-use AmoCRM\EntitiesServices\Leads\Statuses;
 use AmoCRM\EntitiesServices\Roles;
 use AmoCRM\EntitiesServices\Segments;
 use AmoCRM\EntitiesServices\ShortLinks;
@@ -420,17 +419,15 @@ class AmoCRMApiClient
     /**
      * Метод вернет объект статусов
      *
-     * @param int|null $pipelineId
+     * @param int $pipelineId
      *
      * @return Statuses
      */
-    public function statuses(int $pipelineId = null): Statuses
+    public function statuses(int $pipelineId): Statuses
     {
         $request = $this->buildRequest();
         $service = new Statuses($request);
-        if (!is_null($pipelineId)) {
-            $service->setEntityId($pipelineId);
-        }
+        $service->setEntityId($pipelineId);
 
         return $service;
     }
@@ -527,7 +524,7 @@ class AmoCRMApiClient
     {
         $request = $this->buildRequest();
 
-        return new Products($request);
+        return  new Products($request);
     }
 
     /**
