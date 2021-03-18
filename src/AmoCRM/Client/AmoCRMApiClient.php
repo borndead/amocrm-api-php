@@ -5,11 +5,6 @@ namespace AmoCRM\Client;
 use AmoCRM\AmoCRM\EntitiesServices\Customers\BonusPoints;
 use AmoCRM\AmoCRM\EntitiesServices\Links;
 use AmoCRM\AmoCRM\EntitiesServices\Products;
-use AmoCRM\EntitiesServices\Calls;
-use AmoCRM\EntitiesServices\Customers\Transactions;
-use AmoCRM\EntitiesServices\Leads\LossReasons;
-use AmoCRM\EntitiesServices\Leads\Pipelines;
-use AmoCRM\EntitiesServices\Leads\Statuses;
 use AmoCRM\EntitiesServices\Account;
 use AmoCRM\EntitiesServices\Calls;
 use AmoCRM\EntitiesServices\CatalogElements;
@@ -600,7 +595,7 @@ class AmoCRMApiClient
     {
         $request = $this->buildRequest();
 
-        return  new Products($request);
+        return new Products($request);
     }
 
     /**
