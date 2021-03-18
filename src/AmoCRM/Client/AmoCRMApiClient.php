@@ -2,7 +2,14 @@
 
 namespace AmoCRM\Client;
 
+use AmoCRM\AmoCRM\EntitiesServices\Customers\BonusPoints;
+use AmoCRM\AmoCRM\EntitiesServices\Links;
 use AmoCRM\AmoCRM\EntitiesServices\Products;
+use AmoCRM\EntitiesServices\Calls;
+use AmoCRM\EntitiesServices\Customers\Transactions;
+use AmoCRM\EntitiesServices\Leads\LossReasons;
+use AmoCRM\EntitiesServices\Leads\Pipelines;
+use AmoCRM\EntitiesServices\Leads\Statuses;
 use AmoCRM\EntitiesServices\Account;
 use AmoCRM\EntitiesServices\Calls;
 use AmoCRM\EntitiesServices\CatalogElements;
@@ -29,6 +36,7 @@ use AmoCRM\EntitiesServices\Unsorted;
 use AmoCRM\EntitiesServices\Users;
 use AmoCRM\EntitiesServices\Webhooks;
 use AmoCRM\EntitiesServices\Widgets;
+use AmoCRM\Exceptions\AmoCRMMissedTokenException;
 use AmoCRM\Exceptions\InvalidArgumentException;
 use AmoCRM\Helpers\EntityTypesInterface;
 use AmoCRM\OAuth\AmoCRMOAuth;
@@ -70,7 +78,7 @@ class AmoCRMApiClient
      * AmoCRMApiClient constructor.
      * @param string $clientId
      * @param string $clientSecret
-     * @param string $redirectUri
+     * @param null|string $redirectUri
      * @param LoggerInterface|null $logger
      * @param MessageFormatter|null $formatter
      * @param string $logLevel
@@ -78,7 +86,7 @@ class AmoCRMApiClient
     public function __construct(
         string $clientId,
         string $clientSecret,
-        string $redirectUri,
+        ?string $redirectUri,
         LoggerInterface $logger = null,
         MessageFormatter $formatter = null,
         $logLevel = LogLevel::INFO
@@ -134,10 +142,16 @@ class AmoCRMApiClient
 
     /**
      * Метод строит объект для совершения запросов для сервисов сущностей
+     *
      * @return AmoCRMApiRequest
+     * @throws AmoCRMMissedTokenException
      */
     private function buildRequest(): AmoCRMApiRequest
     {
+        if (!$this->isAccessTokenSet()) {
+            throw new AmoCRMMissedTokenException();
+        }
+
         $oAuthClient = $this->getOAuthClient();
 
         $oAuthClient->setAccessTokenRefreshCallback(
@@ -169,7 +183,7 @@ class AmoCRMApiClient
      * @param string $entityType
      *
      * @return EntityNotes
-     * @throws InvalidArgumentException
+     * @throws InvalidArgumentException|AmoCRMMissedTokenException
      */
     public function notes(string $entityType)
     {
@@ -190,7 +204,7 @@ class AmoCRMApiClient
      * @param string $entityType
      *
      * @return EntityTags
-     * @throws InvalidArgumentException
+     * @throws InvalidArgumentException|AmoCRMMissedTokenException
      */
     public function tags(string $entityType)
     {
@@ -207,7 +221,9 @@ class AmoCRMApiClient
 
     /**
      * Метод вернет объект задач
+     *
      * @return Tasks
+     * @throws AmoCRMMissedTokenException
      */
     public function tasks()
     {
@@ -218,7 +234,9 @@ class AmoCRMApiClient
 
     /**
      * Метод вернет объект сделок
+     *
      * @return Leads
+     * @throws AmoCRMMissedTokenException
      */
     public function leads(): Leads
     {
@@ -229,7 +247,9 @@ class AmoCRMApiClient
 
     /**
      * Метод вернет объект контактов
+     *
      * @return Contacts
+     * @throws AmoCRMMissedTokenException
      */
     public function contacts(): Contacts
     {
@@ -240,7 +260,9 @@ class AmoCRMApiClient
 
     /**
      * Метод вернет объект компаний
+     *
      * @return Companies
+     * @throws AmoCRMMissedTokenException
      */
     public function companies()
     {
@@ -251,7 +273,9 @@ class AmoCRMApiClient
 
     /**
      * Метод вернет объект каталогов
+     *
      * @return Catalogs
+     * @throws AmoCRMMissedTokenException
      */
     public function catalogs()
     {
@@ -266,7 +290,7 @@ class AmoCRMApiClient
      * @param int|null $catalogId
      *
      * @return CatalogElements
-     * @throws InvalidArgumentException
+     * @throws InvalidArgumentException|AmoCRMMissedTokenException
      */
     public function catalogElements(int $catalogId = null)
     {
@@ -289,7 +313,7 @@ class AmoCRMApiClient
      * @param string $entityType
      *
      * @return CustomFields
-     * @throws InvalidArgumentException
+     * @throws InvalidArgumentException|AmoCRMMissedTokenException
      */
     public function customFields(string $entityType)
     {
@@ -305,12 +329,26 @@ class AmoCRMApiClient
     }
 
     /**
+     * Метод вернет объект связи сущностей
+     *
+     * @param string $entityType
+     *
+     * @return Links
+     * @throws InvalidArgumentException|AmoCRMMissedTokenException
+     */
+    public function links(string $entityType): Links
+    {
+        return (new Links($this->buildRequest()))
+            ->setEntityType($entityType);
+    }
+
+    /**
      * Метод вернет объект групп кастом полей (табы в карточке)
      *
      * @param string|null $entityType
      *
      * @return CustomFieldGroups
-     * @throws InvalidArgumentException
+     * @throws InvalidArgumentException|AmoCRMMissedTokenException
      */
     public function customFieldGroups(string $entityType = null)
     {
@@ -327,7 +365,9 @@ class AmoCRMApiClient
 
     /**
      * Метод вернет объект аккаунта
+     *
      * @return Account
+     * @throws AmoCRMMissedTokenException
      */
     public function account(): Account
     {
@@ -340,6 +380,7 @@ class AmoCRMApiClient
      * Метод вернет объект ролей пользователей
      *
      * @return Roles
+     * @throws AmoCRMMissedTokenException
      */
     public function roles(): Roles
     {
@@ -352,6 +393,7 @@ class AmoCRMApiClient
      * Метод вернет объект пользователей
      *
      * @return Users
+     * @throws AmoCRMMissedTokenException
      */
     public function users(): Users
     {
@@ -363,7 +405,9 @@ class AmoCRMApiClient
 
     /**
      * Метод вернет объект сегментов покупателей
+     *
      * @return Segments
+     * @throws AmoCRMMissedTokenException
      */
     public function customersSegments(): Segments
     {
@@ -374,7 +418,9 @@ class AmoCRMApiClient
 
     /**
      * Метод вернет объект событий
+     *
      * @return Events
+     * @throws AmoCRMMissedTokenException
      */
     public function events(): Events
     {
@@ -385,7 +431,9 @@ class AmoCRMApiClient
 
     /**
      * Метод вернет объект хуков
+     *
      * @return Webhooks
+     * @throws AmoCRMMissedTokenException
      */
     public function webhooks(): Webhooks
     {
@@ -396,7 +444,9 @@ class AmoCRMApiClient
 
     /**
      * Метод вернет объект неразобранного
+     *
      * @return Unsorted
+     * @throws AmoCRMMissedTokenException
      */
     public function unsorted(): Unsorted
     {
@@ -407,7 +457,9 @@ class AmoCRMApiClient
 
     /**
      * Метод вернет объект воронок
+     *
      * @return Pipelines
+     * @throws AmoCRMMissedTokenException
      */
     public function pipelines(): Pipelines
     {
@@ -423,6 +475,7 @@ class AmoCRMApiClient
      * @param int $pipelineId
      *
      * @return Statuses
+     * @throws AmoCRMMissedTokenException
      */
     public function statuses(int $pipelineId): Statuses
     {
@@ -437,6 +490,7 @@ class AmoCRMApiClient
      * Метод вернет объект виджетов
      *
      * @return Widgets
+     * @throws AmoCRMMissedTokenException
      */
     public function widgets(): Widgets
     {
@@ -449,6 +503,7 @@ class AmoCRMApiClient
      * Метод вернет объект коротких ссылок
      *
      * @return ShortLinks
+     * @throws AmoCRMMissedTokenException
      */
     public function shortLinks(): ShortLinks
     {
@@ -461,6 +516,7 @@ class AmoCRMApiClient
      * Метод вернет объект причин отказа
      *
      * @return LossReasons
+     * @throws AmoCRMMissedTokenException
      */
     public function lossReasons(): LossReasons
     {
@@ -473,6 +529,7 @@ class AmoCRMApiClient
      * Метод вернет объект транзакций
      *
      * @return Transactions
+     * @throws AmoCRMMissedTokenException
      */
     public function transactions(): Transactions
     {
@@ -485,6 +542,7 @@ class AmoCRMApiClient
      * Метод вернет объект покупателей
      *
      * @return Customers
+     * @throws AmoCRMMissedTokenException
      */
     public function customers(): Customers
     {
@@ -497,6 +555,7 @@ class AmoCRMApiClient
      * Метод вернет объект статусов покупателей
      *
      * @return CustomersStatuses
+     * @throws AmoCRMMissedTokenException
      */
     public function customersStatuses(): CustomersStatuses
     {
@@ -506,9 +565,23 @@ class AmoCRMApiClient
     }
 
     /**
+     * Метод вернет объект для списания/начисления бонусных баллов покупателю
+     *
+     * @return BonusPoints
+     * @throws AmoCRMMissedTokenException
+     */
+    public function customersBonusPoints(): BonusPoints
+    {
+        $request = $this->buildRequest();
+
+        return new BonusPoints($request);
+    }
+
+    /**
      * Метод вернет объект звонков
      *
      * @return Calls
+     * @throws AmoCRMMissedTokenException
      */
     public function calls(): Calls
     {
@@ -519,21 +592,34 @@ class AmoCRMApiClient
 
     /**
      * Метод вернет объект Продуктов
+     *
      * @return Products
+     * @throws AmoCRMMissedTokenException
      */
     public function products(): Products
     {
         $request = $this->buildRequest();
 
-        return new Products($request);
+        return  new Products($request);
     }
 
     /**
      * Метод вернет объект запроса для любых запросов в amoCRM с текущим Access Token
+     *
      * @return AmoCRMApiRequest
+     * @throws AmoCRMMissedTokenException
      */
     public function getRequest(): AmoCRMApiRequest
     {
         return $this->buildRequest();
+    }
+
+    /**
+     * Проверка, установлен ли токен
+     * @return bool
+     */
+    public function isAccessTokenSet(): bool
+    {
+        return $this->accessToken !== null;
     }
 }

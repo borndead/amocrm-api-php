@@ -12,7 +12,6 @@ use AmoCRM\Collections\BaseApiCollection;
 use AmoCRM\Filters\BaseEntityFilter;
 use AmoCRM\Models\BaseApiModel;
 use AmoCRM\Models\CallModel;
-use AmoCRM\Models\ContactModel;
 use AmoCRM\Models\Factories\EntityFactory;
 
 /**
@@ -20,8 +19,8 @@ use AmoCRM\Models\Factories\EntityFactory;
  *
  * @package AmoCRM\EntitiesServices
  *
- * @method CallModel addOne(BaseApiModel $model) : CallModel
- * @method CallsCollection add(BaseApiCollection $collection) : CallsCollection
+ * @method CallModel addOne(BaseApiModel $model)
+ * @method CallsCollection add(BaseApiCollection $collection)
  */
 class Calls extends BaseEntity
 {

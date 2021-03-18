@@ -2,6 +2,7 @@
 
 namespace AmoCRM\Models\CustomFieldsValues\Factories;
 
+use AmoCRM\AmoCRM\Models\CustomFieldsValues\TrackingDataCustomFieldValuesModel;
 use AmoCRM\Models\CustomFields\CustomFieldModel;
 use AmoCRM\Models\CustomFieldsValues\BaseCustomFieldValuesModel;
 use AmoCRM\Models\CustomFieldsValues\BirthdayCustomFieldValuesModel;
@@ -101,10 +102,13 @@ class CustomFieldValuesModelFactory
             case CustomFieldModel::TYPE_ORG_LEGAL_NAME:
                 $model = new OrgLegalNameCustomFieldValuesModel();
                 break;
-        }
-
-        if (!isset($model)) {
-            throw new BadTypeException('Unprocessable field type - ' . $fieldType);
+            case CustomFieldModel::TYPE_TRACKING_DATA:
+                $model = new TrackingDataCustomFieldValuesModel();
+                break;
+            default:
+                trigger_error('Unprocessable field type. Please upgrade amoCRM library.', E_NOTICE);
+                $model = new BaseCustomFieldValuesModel();
+                break;
         }
 
         $values = CustomFieldValueCollectionFactory::createCollection($field);

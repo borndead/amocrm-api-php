@@ -3,6 +3,7 @@
 namespace AmoCRM\OAuth;
 
 use AmoCRM\AmoCRM\Exceptions\DisposableTokenExpiredException;
+use AmoCRM\AmoCRM\Exceptions\DisposableTokenInvalidDestinationException;
 use AmoCRM\AmoCRM\Exceptions\DisposableTokenVerificationFailedException;
 use AmoCRM\AmoCRM\Models\AccountDomainModel;
 use AmoCRM\AmoCRM\Models\DisposableTokenModel;
@@ -25,10 +26,15 @@ use GuzzleHttp\HandlerStack;
 use GuzzleHttp\MessageFormatter;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Uri;
-use Lcobucci\JWT\Parser;
+use Lcobucci\Clock\FrozenClock;
+use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
-use Lcobucci\JWT\Signer\Key;
-use Lcobucci\JWT\ValidationData;
+use Lcobucci\JWT\Signer\Key\InMemory;
+use Lcobucci\JWT\Validation\Constraint;
+use Lcobucci\JWT\Validation\Constraint\PermittedFor;
+use Lcobucci\JWT\Validation\Constraint\SignedWith;
+use Lcobucci\JWT\Validation\Constraint\ValidAt;
+use Lcobucci\JWT\Validation\ConstraintViolation;
 use League\OAuth2\Client\Grant\AuthorizationCode;
 use League\OAuth2\Client\Grant\RefreshToken;
 use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
@@ -37,6 +43,8 @@ use League\OAuth2\Client\Token\AccessToken;
 use League\OAuth2\Client\Token\AccessTokenInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
+
+use function sprintf;
 
 /**
  * Class AmoCRMOAuth
@@ -87,7 +95,7 @@ class AmoCRMOAuth
      * AmoCRMOAuth constructor.
      * @param string $clientId
      * @param string $clientSecret
-     * @param string $redirectUri
+     * @param null|string $redirectUri
      * @param LoggerInterface|null $logger
      * @param MessageFormatter|null $formatter
      * @param string $logLevel
@@ -95,7 +103,7 @@ class AmoCRMOAuth
     public function __construct(
         string $clientId,
         string $clientSecret,
-        string $redirectUri,
+        string ?$redirectUri,
         LoggerInterface $logger = null,
         MessageFormatter $formatter = null,
         $logLevel = LogLevel::INFO
@@ -123,7 +131,15 @@ class AmoCRMOAuth
                 ]
             );
         }
-        $this->oauthProvider = new AmoCRM($options, $collaborators);
+//$this->oauthProvider = new AmoCRM($options, $collaborators);
+        $this->oauthProvider = new AmoCRM(
+            [
+                'clientId' => $clientId,
+                'clientSecret' => $clientSecret,
+                'redirectUri' => $redirectUri,
+                'timeout' => self::REQUEST_TIMEOUT,
+            ]
+        );
 
         $this->clientId = $clientId;
         $this->clientSecret = $clientSecret;
@@ -209,6 +225,43 @@ class AmoCRMOAuth
         $this->oauthProvider->setBaseDomain($domain);
 
         return $this;
+    }
+
+    /**
+     * Установка протокола
+     * @param string $protocol
+     *
+     * @return $this
+     */
+    public function setProtocol(string $protocol): self
+    {
+        $this->oauthProvider->setProtocol($protocol);
+
+        return $this;
+    }
+
+    /**
+     * Установка адреса перенаправления
+     *
+     * @param string|null $redirectUri
+     *
+     * @return $this
+     */
+    public function setRedirectUri(?string $redirectUri): self
+    {
+        $this->oauthProvider->setRedirectUri($redirectUri);
+
+        return $this;
+    }
+
+    /**
+     * Получаем oAuth провайдера
+     *
+     * @return AmoCRM
+     */
+    public function getOAuthProvider(): AmoCRM
+    {
+        return $this->oauthProvider;
     }
 
     /**
@@ -377,7 +430,7 @@ class AmoCRMOAuth
                 AmoCRMApiRequest::GET_REQUEST,
                 sprintf(
                     '%s%s%s',
-                    $this->oauthProvider->protocol,
+                    $this->oauthProvider->getProtocol(),
                     $this->oauthProvider->getBaseDomain(),
                     '/oauth2/account/subdomain'
                 ),
@@ -413,34 +466,50 @@ class AmoCRMOAuth
 
     /**
      * Расшифровывает полученный одноразовый токен и возвращает модель
+     *
      * @param string $token
      *
      * @return DisposableTokenModel
+     *
      * @throws DisposableTokenExpiredException
      * @throws DisposableTokenVerificationFailedException
+     * @throws DisposableTokenInvalidDestinationException
      *
      * @link https://www.amocrm.ru/developers/content/web_sdk/mechanics
      */
     public function parseDisposableToken(string $token): DisposableTokenModel
     {
-        $jwtToken = (new Parser())->parse($token);
         $signer = new Sha256();
-
-        // Проверка подписи токена
-        $isVerified = $jwtToken->verify($signer, new Key($this->clientSecret));
-        if (!$isVerified) {
-            throw new DisposableTokenVerificationFailedException('Disposable token verification failed');
-        }
+        $key = InMemory::plainText($this->clientSecret);
 
         $clientBaseUri = new Uri($this->redirectUri);
         $clientBaseUri = sprintf('%s://%s', $clientBaseUri->getScheme(), $clientBaseUri->getHost());
-        $validationData = new ValidationData();
-        $validationData->setAudience($clientBaseUri);
+        $constraints = [
+            // Проверка подписи
+            new SignedWith($signer, $key),
+            // Проверим наш ли адресат
+            new PermittedFor($clientBaseUri),
+            // Проверка жизни токена, с 4.2 deprecated use LooseValidAt
+            new ValidAt(FrozenClock::fromUTC()),
+        ];
 
-        // Проверка на истечение и адресата токена
-        $isValid = $jwtToken->validate($validationData);
-        if (!$isValid) {
-            throw new DisposableTokenExpiredException('Disposable token expired');
+        $configuration = Configuration::forSymmetricSigner($signer, $key);
+        $jwtToken = $configuration->parser()->parse($token);
+
+        try {
+            /** @var Constraint $constraint */
+            foreach ($constraints as $constraint) {
+                $constraint->assert($jwtToken);
+            }
+        } catch (ConstraintViolation $e) {
+            switch (true) {
+                case $constraint instanceof SignedWith:
+                    throw DisposableTokenVerificationFailedException::create();
+                case $constraint instanceof PermittedFor:
+                    throw DisposableTokenInvalidDestinationException::create();
+                case $constraint instanceof ValidAt:
+                    throw DisposableTokenExpiredException::create();
+            }
         }
 
         return DisposableTokenModel::fromJwtToken($jwtToken);

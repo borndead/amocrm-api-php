@@ -38,6 +38,7 @@ class CustomFieldModel extends BaseApiModel implements HasIdInterface
     public const TYPE_ITEMS = 'items';
     public const TYPE_CATEGORY = 'category';
     public const TYPE_PRICE = 'price';
+    public const TYPE_TRACKING_DATA = 'tracking_data';
     /** @deprecated */
     public const TYPE_ORG_LEGAL_NAME = 'org_legal_name';
 
@@ -143,6 +144,11 @@ class CustomFieldModel extends BaseApiModel implements HasIdInterface
     protected $entityType;
 
     /**
+     * @var null|string
+     */
+    protected $trackingCallback;
+
+    /**
      * @param array $customField
      *
      * @return CustomFieldModel
@@ -197,6 +203,10 @@ class CustomFieldModel extends BaseApiModel implements HasIdInterface
             $customFieldModel->setIsPredefined($customField['is_predefined']);
         }
 
+        if (array_key_exists('tracking_callback', $customField)) {
+            $customFieldModel->setTrackingCallback($customField['tracking_callback']);
+        }
+
         return $customFieldModel;
     }
 
@@ -215,6 +225,7 @@ class CustomFieldModel extends BaseApiModel implements HasIdInterface
             'group_id' => $this->getGroupId(),
             'entity_type' => $this->getEntityType(),
             'required_statuses' => $this->getRequiredStatuses(),
+            'tracking_callback' => $this->getTrackingCallback(),
         ];
     }
 
@@ -573,6 +584,26 @@ class CustomFieldModel extends BaseApiModel implements HasIdInterface
     public function setIsPredefined($isPredefined)
     {
         $this->isPredefined = $isPredefined;
+
+        return $this;
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getTrackingCallback(): ?string
+    {
+        return $this->trackingCallback;
+    }
+
+    /**
+     * @param string|null $trackingCallback
+     *
+     * @return CustomFieldModel
+     */
+    public function setTrackingCallback(?string $trackingCallback): CustomFieldModel
+    {
+        $this->trackingCallback = $trackingCallback;
 
         return $this;
     }
