@@ -2,9 +2,12 @@
 
 namespace AmoCRM\Models;
 
+use AmoCRM\Models\Interfaces\ComplexTagsManagerInterface;
+use AmoCRM\Models\Traits\MutateTagsTrait;
 use AmoCRM\Exceptions\InvalidArgumentException;
 use AmoCRM\Helpers\EntityTypesInterface;
 use AmoCRM\Models\Interfaces\CanBeLinkedInterface;
+use AmoCRM\Models\Interfaces\CanReturnDeletedInterface;
 use AmoCRM\Models\Interfaces\HasIdInterface;
 use AmoCRM\Models\Interfaces\TypeAwareInterface;
 use AmoCRM\Models\Traits\GetLinkTrait;
@@ -19,10 +22,16 @@ use AmoCRM\Models\Traits\RequestIdTrait;
 
 use function is_null;
 
-class CompanyModel extends BaseApiModel implements TypeAwareInterface, CanBeLinkedInterface, HasIdInterface
+class CompanyModel extends BaseApiModel implements
+    TypeAwareInterface,
+    CanBeLinkedInterface,
+    HasIdInterface,
+    CanReturnDeletedInterface,
+    ComplexTagsManagerInterface
 {
     use RequestIdTrait;
     use GetLinkTrait;
+    use MutateTagsTrait;
 
     public const LEADS = 'leads';
     public const CUSTOMERS = 'customers';
@@ -596,6 +605,10 @@ class CompanyModel extends BaseApiModel implements TypeAwareInterface, CanBeLink
             $result['custom_fields_values'] = $this->getCustomFieldsValues()->toApi();
         }
 
+        if (!is_null($this->getTagsToAdd()) || !is_null($this->getTagsToDelete())) {
+            $result = $this->mutateTags($result);
+        }
+
         if (!is_null($this->getTags())) {
             $result[AmoCRMApiRequest::EMBEDDED]['tags'] = $this->getTags()->toEntityApi();
         }
@@ -621,6 +634,7 @@ class CompanyModel extends BaseApiModel implements TypeAwareInterface, CanBeLink
             self::CUSTOMERS,
             self::CONTACTS,
             self::CATALOG_ELEMENTS,
+            self::ONLY_DELETED,
         ];
     }
 

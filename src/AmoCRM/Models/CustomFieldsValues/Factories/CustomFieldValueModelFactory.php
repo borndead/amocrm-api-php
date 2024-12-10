@@ -2,8 +2,13 @@
 
 namespace AmoCRM\Models\CustomFieldsValues\Factories;
 
-use AmoCRM\AmoCRM\Models\CustomFieldsValues\ValueModels\TrackingDataCustomFieldValueModel;
-use AmoCRM\Exceptions\BadTypeException;
+use AmoCRM\Models\CustomFieldsValues\ValueModels\ChainedListCustomFieldValueModel;
+use AmoCRM\Models\CustomFieldsValues\ValueModels\FileCustomFieldValueModel;
+use AmoCRM\Models\CustomFieldsValues\ValueModels\LinkedEntityCustomFieldValueModel;
+use AmoCRM\Models\CustomFieldsValues\ValueModels\MonetaryCustomFieldValueModel;
+use AmoCRM\Models\CustomFieldsValues\ValueModels\PayerCustomFieldValueModel;
+use AmoCRM\Models\CustomFieldsValues\ValueModels\SupplierCustomFieldValueModel;
+use AmoCRM\Models\CustomFieldsValues\ValueModels\TrackingDataCustomFieldValueModel;
 use AmoCRM\Helpers\CustomFieldHelper;
 use AmoCRM\Models\CustomFields\CustomFieldModel;
 use AmoCRM\Models\CustomFieldsValues\ValueModels\BaseCustomFieldValueModel;
@@ -27,6 +32,10 @@ use AmoCRM\Models\CustomFieldsValues\ValueModels\TextareaCustomFieldValueModel;
 use AmoCRM\Models\CustomFieldsValues\ValueModels\TextCustomFieldValueModel;
 use AmoCRM\Models\CustomFieldsValues\ValueModels\UrlCustomFieldValueModel;
 
+use function trigger_error;
+
+use const E_USER_NOTICE;
+
 /**
  * Class CustomFieldValueModelFactory
  *
@@ -38,7 +47,6 @@ class CustomFieldValueModelFactory
      * @param array $field
      *
      * @return BaseCustomFieldValueModel
-     * @throws BadTypeException
      */
     public static function createModel(array $field): BaseCustomFieldValueModel
     {
@@ -105,13 +113,31 @@ class CustomFieldValueModelFactory
             case CustomFieldModel::TYPE_TRACKING_DATA:
                 $model = new TrackingDataCustomFieldValueModel();
                 break;
+            case CustomFieldModel::TYPE_LINKED_ENTITY:
+                $model = new LinkedEntityCustomFieldValueModel();
+                break;
+            case CustomFieldModel::TYPE_MONETARY:
+                $model = new MonetaryCustomFieldValueModel();
+                break;
+            case CustomFieldModel::TYPE_CHAINED_LIST:
+                $model = new ChainedListCustomFieldValueModel();
+                break;
+            case CustomFieldModel::TYPE_FILE:
+                $model = new FileCustomFieldValueModel();
+                break;
+            case CustomFieldModel::TYPE_PAYER:
+                $model = new PayerCustomFieldValueModel();
+                break;
+            case CustomFieldModel::TYPE_SUPPLIER:
+                $model = new SupplierCustomFieldValueModel();
+                break;
             default:
+                trigger_error(
+                    "Unprocessable field type '{$fieldType}'. Please upgrade amoCRM library.",
+                    E_USER_NOTICE
+                );
                 $model = new BaseCustomFieldValueModel();
                 break;
-        }
-
-        if (!isset($model)) {
-            throw new BadTypeException('Unprocessable field type - ' . $fieldType);
         }
 
         return $model;

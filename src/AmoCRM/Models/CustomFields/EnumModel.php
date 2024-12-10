@@ -3,7 +3,7 @@
 namespace AmoCRM\Models\CustomFields;
 
 use AmoCRM\Models\BaseApiModel;
-use Illuminate\Contracts\Support\Arrayable;
+use AmoCRM\Contracts\Support\Arrayable;
 
 /**
  * Class EnumModel
@@ -28,6 +28,11 @@ class EnumModel extends BaseApiModel implements Arrayable
     protected $sort;
 
     /**
+     * @var null|string
+     */
+    protected $code;
+
+    /**
      * @param array $enum
      *
      * @return self
@@ -39,7 +44,9 @@ class EnumModel extends BaseApiModel implements Arrayable
         $model
             ->setId($enum['id'])
             ->setValue($enum['value'])
-            ->setSort($enum['sort']);
+            ->setSort($enum['sort'])
+            ->setCode($enum['code'] ?? null)
+        ;
 
         return $model;
     }
@@ -53,6 +60,7 @@ class EnumModel extends BaseApiModel implements Arrayable
             'id' => $this->getId(),
             'value' => $this->getValue(),
             'sort' => $this->getSort(),
+            'code' => $this->getCode(),
         ];
     }
 
@@ -117,6 +125,34 @@ class EnumModel extends BaseApiModel implements Arrayable
     }
 
     /**
+     * @param null|string $code
+     *
+     * @return EnumModel
+     */
+    public function setCode(?string $code): EnumModel
+    {
+        $this->code = $code;
+
+        return $this;
+    }
+
+    /**
+     * @return null|string
+     */
+    public function getCode(): ?string
+    {
+        return $this->code;
+    }
+
+    /**
+     * @return bool
+     */
+    public function hasCode(): bool
+    {
+        return $this->code !== null;
+    }
+
+    /**
      * @param string|null $requestId
      * @return array
      */
@@ -129,6 +165,10 @@ class EnumModel extends BaseApiModel implements Arrayable
 
         if (!is_null($this->getId())) {
             $result['id'] = $this->getId();
+        }
+
+        if ($this->hasCode()) {
+            $result['code'] = $this->getCode();
         }
 
         return $result;

@@ -2,7 +2,12 @@
 
 namespace AmoCRM\Models\CustomFieldsValues\Factories;
 
-use AmoCRM\AmoCRM\Models\CustomFieldsValues\TrackingDataCustomFieldValuesModel;
+use AmoCRM\Models\CustomFieldsValues\ChainedListCustomFieldValuesModel;
+use AmoCRM\Models\CustomFieldsValues\FileCustomFieldValuesModel;
+use AmoCRM\Models\CustomFieldsValues\MonetaryCustomFieldValuesModel;
+use AmoCRM\Models\CustomFieldsValues\PayerCustomFieldValuesModel;
+use AmoCRM\Models\CustomFieldsValues\SupplierCustomFieldValuesModel;
+use AmoCRM\Models\CustomFieldsValues\TrackingDataCustomFieldValuesModel;
 use AmoCRM\Models\CustomFields\CustomFieldModel;
 use AmoCRM\Models\CustomFieldsValues\BaseCustomFieldValuesModel;
 use AmoCRM\Models\CustomFieldsValues\BirthdayCustomFieldValuesModel;
@@ -12,6 +17,7 @@ use AmoCRM\Models\CustomFieldsValues\DateCustomFieldValuesModel;
 use AmoCRM\Models\CustomFieldsValues\DateTimeCustomFieldValuesModel;
 use AmoCRM\Models\CustomFieldsValues\ItemsCustomFieldValuesModel;
 use AmoCRM\Models\CustomFieldsValues\LegalEntityCustomFieldValuesModel;
+use AmoCRM\Models\CustomFieldsValues\LinkedEntityCustomFieldValuesModel;
 use AmoCRM\Models\CustomFieldsValues\MultiselectCustomFieldValuesModel;
 use AmoCRM\Models\CustomFieldsValues\MultitextCustomFieldValuesModel;
 use AmoCRM\Models\CustomFieldsValues\NumericCustomFieldValuesModel;
@@ -105,8 +111,29 @@ class CustomFieldValuesModelFactory
             case CustomFieldModel::TYPE_TRACKING_DATA:
                 $model = new TrackingDataCustomFieldValuesModel();
                 break;
+            case CustomFieldModel::TYPE_LINKED_ENTITY:
+                $model = new LinkedEntityCustomFieldValuesModel();
+                break;
+            case CustomFieldModel::TYPE_MONETARY:
+                $model = new MonetaryCustomFieldValuesModel();
+                break;
+            case CustomFieldModel::TYPE_CHAINED_LIST:
+                $model = new ChainedListCustomFieldValuesModel();
+                break;
+            case CustomFieldModel::TYPE_FILE:
+                $model = new FileCustomFieldValuesModel();
+                break;
+            case CustomFieldModel::TYPE_PAYER:
+                $model = new PayerCustomFieldValuesModel();
+                break;
+            case CustomFieldModel::TYPE_SUPPLIER:
+                $model = new SupplierCustomFieldValuesModel();
+                break;
             default:
-                trigger_error('Unprocessable field type. Please upgrade amoCRM library.', E_NOTICE);
+                trigger_error(
+                    "Unprocessable field type '{$fieldType}'. Please upgrade amoCRM library.",
+                    E_USER_NOTICE
+                );
                 $model = new BaseCustomFieldValuesModel();
                 break;
         }

@@ -13,10 +13,11 @@ use AmoCRM\Models\AccountSettings\UsersGroup;
  * @method null|UsersGroup last()
  * @method null|UsersGroup first()
  * @method null|UsersGroup offsetGet($offset)
- * @method UsersGroupsCollection offsetSet($offset, UsersGroup $value)
+ * @method void offsetSet($offset, UsersGroup $value)
  * @method UsersGroupsCollection prepend(UsersGroup $value)
  * @method UsersGroupsCollection add(UsersGroup $value)
  * @method null|UsersGroup getBy($key, $value)
+ * @method UsersGroupsCollection fromArray($array)
  */
 class UsersGroupsCollection extends BaseApiCollection
 {

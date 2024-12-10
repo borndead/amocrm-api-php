@@ -15,6 +15,8 @@ php:
   - 7.2
   - 7.3
   - 7.4
+  - 8.0
+  - 8.1
 
 install:
   - if [[ $MINIMUM_VERSIONS = false ]]; then composer install; fi
@@ -24,3 +26,5 @@ jobs:
   include:
     - stage: style check
       script: composer run style:check
+    - stage: unit tests
+      script: composer run test

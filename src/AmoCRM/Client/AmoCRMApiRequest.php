@@ -8,6 +8,7 @@ use AmoCRM\Exceptions\AmoCRMApiException;
 use AmoCRM\Exceptions\AmoCRMApiHttpClientException;
 use AmoCRM\Exceptions\AmoCRMApiNoContentException;
 use AmoCRM\Exceptions\AmoCRMApiTooManyRedirectsException;
+use AmoCRM\Exceptions\AmoCRMApiTooManyRequestsException;
 use AmoCRM\Exceptions\AmoCRMoAuthApiException;
 use AmoCRM\OAuth\AmoCRMOAuth;
 use Fig\Http\Message\StatusCodeInterface;
@@ -27,6 +28,7 @@ use Psr\Http\Message\ResponseInterface;
 class AmoCRMApiRequest
 {
     public const POST_REQUEST = 'POST';
+    public const PUT_REQUEST = 'PUT';
     public const GET_REQUEST = 'GET';
     public const PATCH_REQUEST = 'PATCH';
     public const DELETE_REQUEST = 'DELETE';
@@ -34,7 +36,7 @@ class AmoCRMApiRequest
     public const CONNECT_TIMEOUT = 5;
     public const REQUEST_TIMEOUT = 20;
     //TODO Do not forget to change this on each release
-    public const LIBRARY_VERSION = '0.4.6';
+    public const LIBRARY_VERSION = '1.9.0';
     public const USER_AGENT = 'amoCRM-API-Library/' . self::LIBRARY_VERSION;
 
     public const SUCCESS_STATUSES = [
@@ -72,7 +74,7 @@ class AmoCRMApiRequest
     private $lastHttpMethod;
 
     /**
-     * @var array
+     * @var array|mixed
      */
     private $lastBody = [];
 
@@ -96,48 +98,99 @@ class AmoCRMApiRequest
      */
     private $lastRequestId;
 
+    /** @var string|null */
+    private $requestDomain = null;
+
+    /** @var int|null */
+    private $contextUserId = null;
+
+    /** @var string|null */
+    private $userAgent = null;
+
+    /**
+     * @var callable
+     */
+    private $refreshAccessTokenCallback;
+
+    /**
+     * @var callable|null
+     */
+    private $customCheckHttpStatusCallback;
+
     /**
      * AmoCRMApiRequest constructor.
+     *
      * @param AccessTokenInterface $accessToken
      * @param AmoCRMOAuth $oAuthClient
+     * @param int|null $contextUserId
+     * @param string|null $userAgent
      */
-    public function __construct(AccessTokenInterface $accessToken, AmoCRMOAuth $oAuthClient)
-    {
+    public function __construct(
+        AccessTokenInterface $accessToken,
+        AmoCRMOAuth $oAuthClient,
+        ?int $contextUserId,
+        ?string $userAgent
+    ) {
         $this->accessToken = $accessToken;
         $this->oAuthClient = $oAuthClient;
         $this->httpClient = $oAuthClient->getHttpClient();
+        $this->contextUserId = $contextUserId;
+        $this->userAgent = $userAgent;
+        $this->refreshAccessTokenCallback = function () {
+            return $this->oAuthClient->getAccessTokenByRefreshToken($this->accessToken);
+        };
     }
 
+    public function setRefreshAccessTokenCallback(callable $callback): void
+    {
+        $this->refreshAccessTokenCallback = $callback;
+    }
+
+    public function setCustomCheckStatusCallback(callable $callback): void
+    {
+        $this->customCheckHttpStatusCallback = $callback;
+    }
+
+
     /**
-     * Обновляем в библиотеке oAuth аккаунт токен по рефрешу
+     * Обновляем в библиотеке oAuth access токен по refresh
      * @throws AmoCRMoAuthApiException
      */
-    private function refreshAccessToken()
+    private function refreshAccessToken(): void
     {
-        $newAccessToken = $this->oAuthClient->getAccessTokenByRefreshToken($this->accessToken);
+        if ($this->accessToken instanceof LongLivedAccessToken) {
+            throw new AmoCRMoAuthApiException('Can not update LongLivedAccessToken');
+        }
+
+        $newAccessToken = ($this->refreshAccessTokenCallback)();
         $this->accessToken = $newAccessToken;
     }
 
     /**
      * @param string $method
-     * @param array $body
+     * @param array|mixed $body
      * @param array $queryParams
      * @param array $headers
      * @param bool $needToRefresh
+     * @param bool $isFullPath
      *
      * @return array
+     * @throws AmoCRMApiConnectExceptionException
      * @throws AmoCRMApiException
-     * @throws AmoCRMoAuthApiException
+     * @throws AmoCRMApiHttpClientException
      * @throws AmoCRMApiNoContentException
+     * @throws AmoCRMApiTooManyRedirectsException
+     * @throws AmoCRMoAuthApiException
      */
     public function post(
         string $method,
-        array $body = [],
+        $body = [],
         array $queryParams = [],
         array $headers = [],
-        bool $needToRefresh = false
+        bool $needToRefresh = false,
+        bool $isFullPath = false
     ): array {
-        if ($this->accessToken->hasExpired()) {
+        if ($this->isAccessTokenNeedToBeRefreshed()) {
             $needToRefresh = true;
         }
 
@@ -148,22 +201,29 @@ class AmoCRMApiRequest
         $headers = array_merge($headers, $this->getBaseHeaders());
 
         $this->lastHttpMethod = self::POST_REQUEST;
-        $this->lastMethod = $this->oAuthClient->getAccountUrl() . $method;
+        $this->lastMethod = $isFullPath ? $method : $this->getUrl() . $method;
         $this->lastBody = $body;
         $this->lastQueryParams = $queryParams;
+
+        $requestOptions = [
+            'connect_timeout' => self::CONNECT_TIMEOUT,
+            'headers' => $headers,
+            'http_errors' => false,
+            'query' => $queryParams,
+            'timeout' => self::REQUEST_TIMEOUT,
+        ];
+
+        if (is_array($body)) {
+            $requestOptions['json'] = $body;
+        } else {
+            $requestOptions['body'] = $body;
+        }
 
         try {
             $response = $this->httpClient->request(
                 self::POST_REQUEST,
-                $this->oAuthClient->getAccountUrl() . $method,
-                [
-                    'json' => $body,
-                    'connect_timeout' => self::CONNECT_TIMEOUT,
-                    'headers' => $headers,
-                    'http_errors' => false,
-                    'query' => $queryParams,
-                    'timeout' => self::REQUEST_TIMEOUT,
-                ]
+                $isFullPath ? $method : $this->getUrl() . $method,
+                $requestOptions
             );
         } catch (ConnectException $e) {
             throw new AmoCRMApiConnectExceptionException($e->getMessage(), $e->getCode(), $this->getLastRequestInfo());
@@ -184,7 +244,95 @@ class AmoCRMApiRequest
         try {
             $response = $this->parseResponse($response);
         } catch (AmoCRMoAuthApiException $e) {
-            if ($needToRefresh) {
+            if ($needToRefresh || $this->accessToken instanceof LongLivedAccessToken) {
+                throw $e;
+            }
+
+            return $this->post($method, $body, $queryParams, $headers, true);
+        }
+
+        return $response;
+    }
+
+    /**
+     * @param string $method
+     * @param array|mixed $body
+     * @param array $queryParams
+     * @param array $headers
+     * @param bool $needToRefresh
+     * @param bool $isFullPath
+     *
+     * @return array
+     * @throws AmoCRMApiConnectExceptionException
+     * @throws AmoCRMApiException
+     * @throws AmoCRMApiHttpClientException
+     * @throws AmoCRMApiNoContentException
+     * @throws AmoCRMApiTooManyRedirectsException
+     * @throws AmoCRMoAuthApiException
+     */
+    public function put(
+        string $method,
+        $body = [],
+        array $queryParams = [],
+        array $headers = [],
+        bool $needToRefresh = false,
+        bool $isFullPath = false
+    ): array {
+        if ($this->isAccessTokenNeedToBeRefreshed()) {
+            $needToRefresh = true;
+        }
+
+        if ($needToRefresh) {
+            $this->refreshAccessToken();
+        }
+
+        $headers = array_merge($headers, $this->getBaseHeaders());
+
+        $this->lastHttpMethod = self::PUT_REQUEST;
+        $this->lastMethod = $isFullPath ? $method : $this->getUrl() . $method;
+        $this->lastBody = $body;
+        $this->lastQueryParams = $queryParams;
+
+        $requestOptions = [
+            'connect_timeout' => self::CONNECT_TIMEOUT,
+            'headers' => $headers,
+            'http_errors' => false,
+            'query' => $queryParams,
+            'timeout' => self::REQUEST_TIMEOUT,
+        ];
+
+        if (is_array($body)) {
+            $requestOptions['json'] = $body;
+        } else {
+            $requestOptions['body'] = $body;
+        }
+
+        try {
+            $response = $this->httpClient->request(
+                self::PUT_REQUEST,
+                $isFullPath ? $method : $this->getUrl() . $method,
+                $requestOptions
+            );
+        } catch (ConnectException $e) {
+            throw new AmoCRMApiConnectExceptionException($e->getMessage(), $e->getCode(), $this->getLastRequestInfo());
+        } catch (TooManyRedirectsException $e) {
+            throw new AmoCRMApiTooManyRedirectsException($e->getMessage(), $e->getCode(), $this->getLastRequestInfo());
+        } catch (GuzzleException $e) {
+            throw new AmoCRMApiHttpClientException($e->getMessage(), $e->getCode(), $this->getLastRequestInfo());
+        }
+
+        if (!empty($response->getHeader('X-Request-Id'))) {
+            $this->lastRequestId = $response->getHeader('X-Request-Id')[0];
+        }
+
+        /**
+         * В случае получения ошибки авторизации, пробуем обновить токен 1 раз,
+         * если не получилось, то тогда уже выкидываем Exception
+         */
+        try {
+            $response = $this->parseResponse($response);
+        } catch (AmoCRMoAuthApiException $e) {
+            if ($needToRefresh || $this->accessToken instanceof LongLivedAccessToken) {
                 throw $e;
             }
 
@@ -212,7 +360,7 @@ class AmoCRMApiRequest
         array $headers = [],
         bool $needToRefresh = false
     ): array {
-        if ($this->accessToken->hasExpired()) {
+        if ($this->isAccessTokenNeedToBeRefreshed()) {
             $needToRefresh = true;
         }
 
@@ -223,14 +371,14 @@ class AmoCRMApiRequest
         $headers = array_merge($headers, $this->getBaseHeaders());
 
         $this->lastHttpMethod = self::PATCH_REQUEST;
-        $this->lastMethod = $this->oAuthClient->getAccountUrl() . $method;
+        $this->lastMethod = $this->getUrl() . $method;
         $this->lastBody = $body;
         $this->lastQueryParams = $queryParams;
 
         try {
             $response = $this->httpClient->request(
                 self::PATCH_REQUEST,
-                $this->oAuthClient->getAccountUrl() . $method,
+                $this->getUrl() . $method,
                 [
                     RequestOptions::JSON => $body,
                     RequestOptions::CONNECT_TIMEOUT => self::CONNECT_TIMEOUT,
@@ -259,7 +407,7 @@ class AmoCRMApiRequest
         try {
             $response = $this->parseResponse($response);
         } catch (AmoCRMoAuthApiException $e) {
-            if ($needToRefresh) {
+            if ($needToRefresh || $this->accessToken instanceof LongLivedAccessToken) {
                 throw $e;
             }
 
@@ -278,7 +426,6 @@ class AmoCRMApiRequest
      * @return array
      * @throws AmoCRMApiException
      * @throws AmoCRMoAuthApiException
-     * @throws AmoCRMApiNoContentException
      */
     public function delete(
         string $method,
@@ -287,7 +434,7 @@ class AmoCRMApiRequest
         array $headers = [],
         bool $needToRefresh = false
     ): array {
-        if ($this->accessToken->hasExpired()) {
+        if ($this->isAccessTokenNeedToBeRefreshed()) {
             $needToRefresh = true;
         }
 
@@ -298,14 +445,14 @@ class AmoCRMApiRequest
         $headers = array_merge($headers, $this->getBaseHeaders());
 
         $this->lastHttpMethod = self::DELETE_REQUEST;
-        $this->lastMethod = $this->oAuthClient->getAccountUrl() . $method;
+        $this->lastMethod = $this->getUrl() . $method;
         $this->lastBody = $body;
         $this->lastQueryParams = $queryParams;
 
         try {
             $response = $this->httpClient->request(
                 self::DELETE_REQUEST,
-                $this->oAuthClient->getAccountUrl() . $method,
+                $this->getUrl() . $method,
                 [
                     RequestOptions::JSON => $body,
                     RequestOptions::CONNECT_TIMEOUT => self::CONNECT_TIMEOUT,
@@ -334,13 +481,13 @@ class AmoCRMApiRequest
         try {
             $response = $this->parseResponse($response);
         } catch (AmoCRMoAuthApiException $e) {
-            if ($needToRefresh) {
+            if ($needToRefresh || $this->accessToken instanceof LongLivedAccessToken) {
                 throw $e;
             }
 
             return $this->delete($method, $body, $queryParams, $headers, true);
         } catch (AmoCRMApiNoContentException $e) {
-            return $response = ['result' => true];
+            return ['result' => true];
         }
 
         return $response;
@@ -361,7 +508,7 @@ class AmoCRMApiRequest
         array $headers = [],
         bool $needToRefresh = false
     ): array {
-        if ($this->accessToken->hasExpired()) {
+        if ($this->isAccessTokenNeedToBeRefreshed()) {
             $needToRefresh = true;
         }
 
@@ -370,14 +517,14 @@ class AmoCRMApiRequest
         }
 
         $headers = array_merge($headers, $this->getBaseHeaders());
-        $method = $this->oAuthClient->getAccountUrl() .
+
+        $this->lastHttpMethod = self::GET_REQUEST;
+        $method = $this->getUrl() .
             str_replace(
-                $this->oAuthClient->getAccountUrl(),
+                $this->getUrl(),
                 '',
                 $method
             );
-
-        $this->lastHttpMethod = self::GET_REQUEST;
         $this->lastMethod = $method;
         $this->lastBody = [];
         $this->lastQueryParams = $queryParams;
@@ -413,7 +560,7 @@ class AmoCRMApiRequest
         try {
             $response = $this->parseResponse($response);
         } catch (AmoCRMoAuthApiException $e) {
-            if ($needToRefresh) {
+            if ($needToRefresh || $this->accessToken instanceof LongLivedAccessToken) {
                 throw $e;
             }
 
@@ -433,6 +580,15 @@ class AmoCRMApiRequest
     protected function checkHttpStatus(ResponseInterface $response, $decodedBody = []): void
     {
         $this->lastResponseCode = $response->getStatusCode();
+
+        if (
+            $this->customCheckHttpStatusCallback !== null
+            && is_callable($this->customCheckHttpStatusCallback)
+            && ($this->customCheckHttpStatusCallback)($response, $decodedBody) === true
+        ) {
+            return;
+        }
+
         if ((int)$response->getStatusCode() === StatusCodeInterface::STATUS_UNAUTHORIZED) {
             throw new AmoCRMoAuthApiException(
                 "Unauthorized",
@@ -495,6 +651,14 @@ class AmoCRMApiRequest
             && !$decodedBody
             && !empty($bodyContents)
         ) {
+            if ($response->getStatusCode() === StatusCodeInterface::STATUS_TOO_MANY_REQUESTS) {
+                throw new AmoCRMApiTooManyRequestsException(
+                    "Too many requests",
+                    $response->getStatusCode(),
+                    $this->getLastRequestInfo()
+                );
+            }
+
             throw new AmoCRMApiException(
                 "Response body is not json",
                 $response->getStatusCode(),
@@ -514,8 +678,13 @@ class AmoCRMApiRequest
     {
         $headers = $this->oAuthClient->getAuthorizationHeaders($this->accessToken);
 
-        $headers['User-Agent'] = self::USER_AGENT;
-        $headers['X-Library-Version'] = self::USER_AGENT;
+        $headers['User-Agent'] = $this->getUserAgent();
+        $headers['X-Library-Version'] = self::LIBRARY_VERSION;
+        $headers['X-Client-UUID'] = $this->oAuthClient->getOAuthProvider()->getClientId();
+
+        if (!is_null($this->contextUserId)) {
+            $headers['X-Context-User-ID'] = $this->contextUserId;
+        }
 
         return $headers;
     }
@@ -526,6 +695,7 @@ class AmoCRMApiRequest
     public function getLastRequestInfo(): array
     {
         return [
+            'context_user_id' => $this->contextUserId,
             'last_http_method' => $this->lastHttpMethod,
             'last_method' => $this->lastMethod,
             'last_body' => $this->lastBody,
@@ -575,6 +745,41 @@ $.ajax({
 
         $requestHttpMethod = $this->lastHttpMethod;
 
-        return 'curl "' . $url . '" -X "' . $requestHttpMethod . '" -d"' . http_build_query($this->lastBody) . '"';
+        $data = is_array($this->lastBody) ? http_build_query($this->lastBody) : $this->lastBody;
+
+        return 'curl "' . $url . '" -X "' . $requestHttpMethod . '" -d"' . $data . '"';
+    }
+
+    private function getRequestDomain(): ?string
+    {
+        return $this->requestDomain;
+    }
+
+    public function setRequestDomain(?string $requestDomain): void
+    {
+        if ($requestDomain !== null && $requestDomain[strlen($requestDomain) - 1] === '.') {
+            $hostExploded = explode(".", parse_url($this->oAuthClient->getAccountUrl(), PHP_URL_HOST));
+            $tld = end($hostExploded);
+            $requestDomain .= $tld;
+        }
+
+        $this->requestDomain = $requestDomain;
+    }
+
+    private function getUrl(): string
+    {
+        return !is_null($this->getRequestDomain()) ? $this->getRequestDomain() . '/' : $this->oAuthClient->getAccountUrl();
+    }
+
+    public function getUserAgent(): string
+    {
+        return !empty($this->userAgent)
+            ? sprintf('%s (%s)', $this->userAgent, self::USER_AGENT)
+            : self::USER_AGENT;
+    }
+
+    private function isAccessTokenNeedToBeRefreshed(): bool
+    {
+        return !$this->accessToken instanceof LongLivedAccessToken && $this->accessToken->hasExpired();
     }
 }

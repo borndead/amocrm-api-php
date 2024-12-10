@@ -5,7 +5,7 @@ namespace AmoCRM\Models;
 use AmoCRM\Models\Factories\NoteFactory;
 use AmoCRM\Models\Interfaces\HasIdInterface;
 use AmoCRM\Models\Traits\RequestIdTrait;
-use Illuminate\Contracts\Support\Arrayable;
+use AmoCRM\Contracts\Support\Arrayable;
 
 /**
  * Class NoteModel
@@ -24,7 +24,7 @@ class NoteModel extends BaseApiModel implements Arrayable, HasIdInterface
     protected $id;
 
     /**
-     * @var string
+     * @var int
      */
     protected $entityId;
 
@@ -62,6 +62,11 @@ class NoteModel extends BaseApiModel implements Arrayable, HasIdInterface
      * @var null|int
      */
     protected $accountId;
+
+    /**
+     * @var null|bool
+     */
+    protected $isNeedToTriggerDigitalPipelineFlag;
 
     /**
      * @param array $note
@@ -104,6 +109,10 @@ class NoteModel extends BaseApiModel implements Arrayable, HasIdInterface
             $model->setAccountId((int)$note['account_id']);
         }
 
+        if (!empty($note['is_need_to_trigger_digital_pipeline'])) {
+            $model->setIsNeedToTriggerDigitalPipeline((bool)$note['is_need_to_trigger_digital_pipeline']);
+        }
+
         return $model;
     }
 
@@ -133,6 +142,7 @@ class NoteModel extends BaseApiModel implements Arrayable, HasIdInterface
             'created_at' => $this->getCreatedAt(),
             'updated_at' => $this->getUpdatedAt(),
             'account_id' => $this->getAccountId(),
+            'is_need_to_trigger_digital_pipeline' => $this->getIsNeedToTriggerDigitalPipeline(),
         ];
     }
 
@@ -146,10 +156,14 @@ class NoteModel extends BaseApiModel implements Arrayable, HasIdInterface
 
     /**
      * @param int $id
+     *
+     * @return NoteModel
      */
-    public function setId(int $id): void
+    public function setId(int $id): NoteModel
     {
         $this->id = $id;
+
+        return $this;
     }
 
     /**
@@ -305,6 +319,25 @@ class NoteModel extends BaseApiModel implements Arrayable, HasIdInterface
     }
 
     /**
+     * @return bool|null
+     */
+    public function getIsNeedToTriggerDigitalPipeline(): ?bool
+    {
+        return $this->isNeedToTriggerDigitalPipelineFlag;
+    }
+
+    /**
+     * @param bool|null $isNeedToTriggerDigitalPipelineFlag
+     * @return NoteModel
+     */
+    public function setIsNeedToTriggerDigitalPipeline(?bool $isNeedToTriggerDigitalPipelineFlag): NoteModel
+    {
+        $this->isNeedToTriggerDigitalPipelineFlag = $isNeedToTriggerDigitalPipelineFlag;
+
+        return $this;
+    }
+
+    /**
      * @param string|null $requestId
      * @return array
      */
@@ -347,6 +380,10 @@ class NoteModel extends BaseApiModel implements Arrayable, HasIdInterface
         $result['request_id'] = $this->getRequestId();
 
         $result['note_type'] = $this->getNoteType();
+
+        if (!is_null($this->getIsNeedToTriggerDigitalPipeline())) {
+            $result['is_need_to_trigger_digital_pipeline'] = $this->getIsNeedToTriggerDigitalPipeline();
+        }
 
         return $result;
     }

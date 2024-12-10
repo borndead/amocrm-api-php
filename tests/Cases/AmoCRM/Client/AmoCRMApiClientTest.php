@@ -1,5 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
+namespace Cases\AmoCRM\Client;
+
 use AmoCRM\Client\AmoCRMApiClient;
 use AmoCRM\Client\AmoCRMApiRequest;
 use AmoCRM\EntitiesServices\Account;
@@ -30,6 +34,9 @@ use AmoCRM\Helpers\EntityTypesInterface;
 use AmoCRM\OAuth\AmoCRMOAuth;
 use League\OAuth2\Client\Token\AccessToken;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use ReflectionException;
+use TypeError;
 
 class AmoCRMApiClientTest extends TestCase
 {
@@ -38,7 +45,7 @@ class AmoCRMApiClientTest extends TestCase
      */
     private $apiClient;
 
-    public function setUp()
+    public function setUp(): void
     {
         $this->apiClient = new AmoCRMApiClient('xxx', 'xxx', 'xxx');
         $this->apiClient->setAccessToken(new AccessToken([
@@ -134,6 +141,17 @@ class AmoCRMApiClientTest extends TestCase
             $this->apiClient->onAccessTokenRefresh(function () {})
         );
         $callback = $this->_getInnerPropertyValueByReflection('accessTokenRefreshCallback');
+        $this->assertIsCallable($callback);
+    }
+
+    public function testSetOnRefreshAccessTokenCallback()
+    {
+        $this->assertInstanceOf(
+            AmoCRMApiClient::class,
+            $this->apiClient->setRefreshAccessTokenCallback(function () {
+            })
+        );
+        $callback = $this->_getInnerPropertyValueByReflection('refreshAccessTokenCallback');
         $this->assertIsCallable($callback);
     }
 
@@ -312,12 +330,23 @@ class AmoCRMApiClientTest extends TestCase
             $this->apiClient->customFieldGroups(EntityTypesInterface::CUSTOMERS)
         );
 
+        $this->assertInstanceOf(
+            CustomFieldGroups::class,
+            $this->apiClient->customFieldGroups(EntityTypesInterface::CATALOGS . ':2000')
+        );
+
         $this->assertInstanceOf(CustomFieldGroups::class, $this->apiClient->customFieldGroups());
 
         $this->expectException(InvalidArgumentException::class);
         $this->assertInstanceOf(
             CustomFieldGroups::class,
             $this->apiClient->customFieldGroups(EntityTypesInterface::TASKS)
+        );
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->assertInstanceOf(
+            CustomFields::class,
+            $this->apiClient->customFieldGroups(EntityTypesInterface::CATALOGS . ':' . EntityTypesInterface::MIN_CATALOG_ID)
         );
     }
 

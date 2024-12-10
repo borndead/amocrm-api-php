@@ -1,8 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
+namespace Cases\AmoCRM\Filters;
+
 use AmoCRM\Filters\BaseRangeFilter;
 use AmoCRM\Filters\LeadsFilter;
 use PHPUnit\Framework\TestCase;
+use stdClass;
+use TypeError;
 
 class LeadsFilterTest extends TestCase
 {
@@ -11,7 +17,7 @@ class LeadsFilterTest extends TestCase
      */
     private $leadsFilter;
 
-    public function setUp()
+    public function setUp(): void
     {
         $this->leadsFilter = new LeadsFilter();
     }
@@ -59,6 +65,9 @@ class LeadsFilterTest extends TestCase
 
         $obj = new stdClass();
         $this->leadsFilter->setQuery($obj);
+
+        $int = 123;
+        $this->leadsFilter->setQuery($int);
     }
 
     /**

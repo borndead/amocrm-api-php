@@ -2,30 +2,38 @@
 
 namespace AmoCRM\Client;
 
-use AmoCRM\AmoCRM\EntitiesServices\Customers\BonusPoints;
-use AmoCRM\AmoCRM\EntitiesServices\Links;
-use AmoCRM\AmoCRM\EntitiesServices\Products;
+use AmoCRM\EntitiesServices\Currencies;
 use AmoCRM\EntitiesServices\Account;
 use AmoCRM\EntitiesServices\Calls;
 use AmoCRM\EntitiesServices\CatalogElements;
 use AmoCRM\EntitiesServices\Catalogs;
+use AmoCRM\EntitiesServices\Chats\Templates;
 use AmoCRM\EntitiesServices\Companies;
 use AmoCRM\EntitiesServices\Contacts;
+use AmoCRM\EntitiesServices\Customers\BonusPoints;
 use AmoCRM\EntitiesServices\Customers\Customers;
 use AmoCRM\EntitiesServices\Customers\Statuses as CustomersStatuses;
 use AmoCRM\EntitiesServices\Customers\Transactions;
 use AmoCRM\EntitiesServices\CustomFieldGroups;
 use AmoCRM\EntitiesServices\CustomFields;
+use AmoCRM\EntitiesServices\EntityFiles;
 use AmoCRM\EntitiesServices\EntityNotes;
+use AmoCRM\EntitiesServices\Files;
+use AmoCRM\EntitiesServices\Sources;
+use AmoCRM\EntitiesServices\EntitySubscriptions;
 use AmoCRM\EntitiesServices\EntityTags;
 use AmoCRM\EntitiesServices\Events;
 use AmoCRM\EntitiesServices\Leads;
 use AmoCRM\EntitiesServices\Leads\LossReasons;
 use AmoCRM\EntitiesServices\Leads\Pipelines;
 use AmoCRM\EntitiesServices\Leads\Statuses;
+use AmoCRM\EntitiesServices\Links;
+use AmoCRM\EntitiesServices\Products;
 use AmoCRM\EntitiesServices\Roles;
 use AmoCRM\EntitiesServices\Segments;
 use AmoCRM\EntitiesServices\ShortLinks;
+use AmoCRM\EntitiesServices\Sources\WebsiteButtons;
+use AmoCRM\EntitiesServices\Talks;
 use AmoCRM\EntitiesServices\Tasks;
 use AmoCRM\EntitiesServices\Unsorted;
 use AmoCRM\EntitiesServices\Users;
@@ -39,6 +47,7 @@ use GuzzleHttp\MessageFormatter;
 use League\OAuth2\Client\Token\AccessToken;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
+
 use function is_callable;
 
 /**
@@ -49,6 +58,7 @@ use function is_callable;
 class AmoCRMApiClient
 {
     public const API_VERSION = 4;
+    public const DRIVE_API_VERSION = 'v1.0';
 
     /**
      * @var AmoCRMOAuth
@@ -70,20 +80,41 @@ class AmoCRMApiClient
     private $accessTokenRefreshCallback;
 
     /**
+     * @var null|int
+     */
+    private $contextUserId;
+
+    /**
+     * @var string|null
+     */
+    private $userAgent;
+
+    /**
+     * @var callable|null
+     */
+    private $refreshAccessTokenCallback;
+
+    /**
+     * @var callable|null
+     */
+    private $checkHttpStatusCallback;
+
+    /**
      * AmoCRMApiClient constructor.
-     * @param string $clientId
-     * @param string $clientSecret
+     *
+     * @param string|null $clientId
+     * @param string|null $clientSecret
      * @param null|string $redirectUri
      * @param LoggerInterface|null $logger
      * @param MessageFormatter|null $formatter
      * @param string $logLevel
      */
     public function __construct(
-        string $clientId,
-        string $clientSecret,
-        ?string $redirectUri,
-        LoggerInterface $logger = null,
-        MessageFormatter $formatter = null,
+        ?string $clientId = null,
+        ?string $clientSecret = null,
+        ?string $redirectUri = null,
+        ?LoggerInterface $logger = null,
+        ?MessageFormatter $formatter = null,
         $logLevel = LogLevel::INFO
     ) {
         $this->oAuthClient = new AmoCRMOAuth($clientId, $clientSecret, $redirectUri, $logger, $formatter, $logLevel);
@@ -99,6 +130,43 @@ class AmoCRMApiClient
         $this->accessToken = $accessToken;
 
         return $this;
+    }
+
+    public function getAccessToken(): ?AccessToken
+    {
+        return $this->accessToken;
+    }
+
+    public function getContextUserId(): ?int
+    {
+        return $this->contextUserId;
+    }
+
+    /**
+     * Для админских токеном можно задать пользователя аккаунта, в контексте которого будет сделан запрос
+     * Метод возвращает новый объект апи клиента с установленным контекстом
+     * @param int|null $contextUserId
+     *
+     * @return $this
+     */
+    public function withContextUserId(?int $contextUserId): AmoCRMApiClient
+    {
+        $apiClient = clone $this;
+        $apiClient->contextUserId = $contextUserId;
+
+        return $apiClient;
+    }
+
+    public function setUserAgent(?string $userAgent): self
+    {
+        $this->userAgent = $userAgent;
+
+        return $this;
+    }
+
+    public function getUserAgent(): ?string
+    {
+        return $this->userAgent;
     }
 
     /**
@@ -136,6 +204,33 @@ class AmoCRMApiClient
     }
 
     /**
+     * Устанавливаем callback, который будет вызван для обновления AccessToken`a библиотеки
+     *
+     * @param callable $callable
+     * @return $this
+     */
+    public function setRefreshAccessTokenCallback(callable $callable): self
+    {
+        $this->refreshAccessTokenCallback = $callable;
+
+        return $this;
+    }
+
+    /**
+     * Устанавливаем callback, который будет вызван при обработке ответа от сервера.
+     * Если нет необходимости в отработке стандартной логики обработки ответа, то callback должен возвращать true
+     *
+     * @param callable $callable
+     * @return $this
+     */
+    public function setCheckHttpStatusCallback(callable $callable): self
+    {
+        $this->checkHttpStatusCallback = $callable;
+
+        return $this;
+    }
+
+    /**
      * Метод строит объект для совершения запросов для сервисов сущностей
      *
      * @return AmoCRMApiRequest
@@ -160,7 +255,22 @@ class AmoCRMApiClient
             }
         );
 
-        return new AmoCRMApiRequest($this->accessToken, $oAuthClient);
+        $request = new AmoCRMApiRequest(
+            $this->getAccessToken(),
+            $oAuthClient,
+            $this->getContextUserId(),
+            $this->getUserAgent()
+        );
+
+        if ($this->refreshAccessTokenCallback !== null) {
+            $request->setRefreshAccessTokenCallback($this->refreshAccessTokenCallback);
+        }
+
+        if ($this->checkHttpStatusCallback !== null) {
+            $request->setCustomCheckStatusCallback($this->checkHttpStatusCallback);
+        }
+
+        return $request;
     }
 
     /**
@@ -372,6 +482,49 @@ class AmoCRMApiClient
     }
 
     /**
+     * @return WebsiteButtons
+     * @throws AmoCRMMissedTokenException
+     */
+    public function websiteButtons(): WebsiteButtons
+    {
+        $request = $this->buildRequest();
+
+        return new WebsiteButtons($request);
+    }
+
+    /**
+     * Метод вернет объект аккаунта
+     *
+     * @param string|null $domain
+     *
+     * @return Files
+     * @throws AmoCRMMissedTokenException
+     */
+    public function files(?string $domain = null): Files
+    {
+        $request = $this->buildRequest();
+        $request->setRequestDomain($domain ?? 'https://drive.amocrm.');
+
+        return new Files($request);
+    }
+
+    /**
+     * Метод вернет объект для работы со связями файлов с сущностями
+     *
+     * @param string $entityType
+     * @param int $entityId
+     *
+     * @return EntityFiles
+     * @throws InvalidArgumentException|AmoCRMMissedTokenException
+     */
+    public function entityFiles(string $entityType, int $entityId): EntityFiles
+    {
+        return (new EntityFiles($this->buildRequest()))
+            ->setEntityType($entityType)
+            ->setEntityId($entityId);
+    }
+
+    /**
      * Метод вернет объект ролей пользователей
      *
      * @return Roles
@@ -463,6 +616,31 @@ class AmoCRMApiClient
         return new Pipelines($request);
     }
 
+    /**
+     * Метод вернет объект Источников
+     *
+     * @return Sources
+     * @throws AmoCRMMissedTokenException
+     */
+    public function sources(): Sources
+    {
+        $request = $this->buildRequest();
+
+        return new Sources($request);
+    }
+
+    /**
+     * Метод вернет объект шаблонов чатов
+     *
+     * @return Templates
+     * @throws AmoCRMMissedTokenException
+     */
+    public function chatTemplates(): Templates
+    {
+        $request = $this->buildRequest();
+
+        return new Templates($request);
+    }
 
     /**
      * Метод вернет объект статусов
@@ -523,6 +701,7 @@ class AmoCRMApiClient
     /**
      * Метод вернет объект транзакций
      *
+     * @deprecated Скорее всего будет удалено в релизе 0.8 (Ориентировачно осень-зима 2021)
      * @return Transactions
      * @throws AmoCRMMissedTokenException
      */
@@ -598,6 +777,17 @@ class AmoCRMApiClient
         return new Products($request);
     }
 
+    public function talks(): Talks
+    {
+        return new Talks($this->buildRequest());
+    }
+
+    public function entitySubscriptions(string $entityType): EntitySubscriptions
+    {
+        return (new EntitySubscriptions($this->buildRequest()))
+            ->setEntityType($entityType);
+    }
+
     /**
      * Метод вернет объект запроса для любых запросов в amoCRM с текущим Access Token
      *
@@ -616,5 +806,17 @@ class AmoCRMApiClient
     public function isAccessTokenSet(): bool
     {
         return $this->accessToken !== null;
+    }
+
+    /**
+     * Метод вернет объект валют
+     *
+     * @since Release Spring 2022
+     * @return Currencies
+     * @throws AmoCRMMissedTokenException
+     */
+    public function currencies(): Currencies
+    {
+        return new Currencies($this->buildRequest());
     }
 }

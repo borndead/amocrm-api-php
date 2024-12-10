@@ -5,10 +5,11 @@ namespace AmoCRM\Collections;
 use AmoCRM\Models\BaseApiModel;
 use ArrayAccess;
 use ArrayIterator;
-use Illuminate\Support\Str;
+use AmoCRM\Support\Str;
 use InvalidArgumentException;
 use IteratorAggregate;
 use JsonSerializable;
+use Traversable;
 
 use function array_column;
 use function array_combine;
@@ -108,13 +109,12 @@ abstract class BaseApiCollection implements ArrayAccess, JsonSerializable, Itera
     /**
      * @param string|int $offset
      * @param BaseApiModel $value
-     * @return $this
+     *
+     * @return void
      */
-    public function offsetSet($offset, $value): self
+    public function offsetSet($offset, $value): void
     {
         $this->data[$offset] = $this->checkItem($value);
-
-        return $this;
     }
 
     /**
@@ -179,13 +179,11 @@ abstract class BaseApiCollection implements ArrayAccess, JsonSerializable, Itera
      *
      * @param string|int $offset
      *
-     * @return $this
+     * @return void
      */
-    public function offsetUnset($offset): self
+    public function offsetUnset($offset): void
     {
         unset($this->data[$offset]);
-
-        return $this;
     }
 
     /**
@@ -313,7 +311,7 @@ abstract class BaseApiCollection implements ArrayAccess, JsonSerializable, Itera
      *
      * @return ArrayIterator
      */
-    public function getIterator()
+    public function getIterator(): Traversable
     {
         return new ArrayIterator($this->data);
     }
@@ -346,7 +344,7 @@ abstract class BaseApiCollection implements ArrayAccess, JsonSerializable, Itera
     }
 
     /**
-     * Поиск объекта в коллекции по параметру объекта
+     * Замена объекта в коллекции по параметру объекта
      *
      * @param string $key
      * @param mixed $value
@@ -373,6 +371,80 @@ abstract class BaseApiCollection implements ArrayAccess, JsonSerializable, Itera
     }
 
     /**
+     * Разделение коллекции на массив состоящий из коллекций определенной длинны
+     *
+     * @param int $size
+     * @return BaseApiCollection[]
+     */
+    public function chunk(int $size): array
+    {
+        if ($this->count() < $size) {
+            return [$this];
+        }
+        $result = [new static()];
+        foreach ($this->data as $item) {
+            if ((end($result)->count()) >= $size) {
+                $result[] = new static();
+            }
+            end($result)->add($item);
+        }
+        return $result;
+    }
+
+    /**
+     * Удаление объектов из коллекции по параметру объекта
+     *
+     * @param string $key
+     * @param mixed $value
+     *
+     * @return int count
+     */
+    public function removeBy($key, $value): int
+    {
+        $key = Str::ucfirst(Str::camel($key));
+        $getter = (method_exists(static::ITEM_CLASS, 'get' . $key) ? 'get' . $key : null);
+
+        $count = 0;
+        if ($getter) {
+            foreach ($this->data as $dataKey => $object) {
+                $fieldValue = $object->$getter();
+
+                if ($fieldValue === $value) {
+                    $this->offsetUnset($dataKey);
+                    $count++;
+                }
+            }
+        }
+        return $count;
+    }
+
+    /**
+     * Удаление первого объекта из коллекции по параметру объекта
+     *
+     * @param string $key
+     * @param mixed $value
+     *
+     * @return bool
+     */
+    public function removeFirstBy($key, $value): bool
+    {
+        $key = Str::ucfirst(Str::camel($key));
+        $getter = (method_exists(static::ITEM_CLASS, 'get' . $key) ? 'get' . $key : null);
+
+        if ($getter) {
+            foreach ($this->data as $dataKey => $object) {
+                $fieldValue = $object->$getter();
+
+                if ($fieldValue === $value) {
+                    $this->offsetUnset($dataKey);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * @param string $column
      *
      * @return array
@@ -386,5 +458,21 @@ abstract class BaseApiCollection implements ArrayAccess, JsonSerializable, Itera
         }
 
         return array_combine(array_keys($data), $values);
+    }
+
+    /**
+     * @param BaseApiCollection $items
+     *
+     * @return BaseApiCollection
+     */
+    public function merge(BaseApiCollection $items): BaseApiCollection
+    {
+        if (!$items instanceof static) {
+            throw new InvalidArgumentException('Items must be an instance of ' . static::class);
+        }
+
+        $result = array_merge($this->all(), $items->all());
+
+        return static::make($result);
     }
 }

@@ -2,8 +2,13 @@
 
 namespace AmoCRM\Models\CustomFieldsValues\Factories;
 
-use AmoCRM\AmoCRM\Models\CustomFieldsValues\ValueCollections\TrackingDataCustomFieldValueCollection;
-use AmoCRM\Exceptions\BadTypeException;
+use AmoCRM\Models\CustomFieldsValues\ValueCollections\SupplierCustomFieldValueCollection;
+use AmoCRM\Models\CustomFieldsValues\ValueCollections\ChainedListCustomFieldValueCollection;
+use AmoCRM\Models\CustomFieldsValues\ValueCollections\FileCustomFieldValueCollection;
+use AmoCRM\Models\CustomFieldsValues\ValueCollections\MonetaryCustomFieldValueCollection;
+use AmoCRM\Models\CustomFieldsValues\ValueCollections\LinkedEntityCustomFieldValueCollection;
+use AmoCRM\Models\CustomFieldsValues\ValueCollections\PayerCustomFieldValueCollection;
+use AmoCRM\Models\CustomFieldsValues\ValueCollections\TrackingDataCustomFieldValueCollection;
 use AmoCRM\Helpers\CustomFieldHelper;
 use AmoCRM\Models\CustomFields\CustomFieldModel;
 use AmoCRM\Models\CustomFieldsValues\ValueCollections\BaseCustomFieldValueCollection;
@@ -27,6 +32,10 @@ use AmoCRM\Models\CustomFieldsValues\ValueCollections\TextareaCustomFieldValueCo
 use AmoCRM\Models\CustomFieldsValues\ValueCollections\TextCustomFieldValueCollection;
 use AmoCRM\Models\CustomFieldsValues\ValueCollections\UrlCustomFieldValueCollection;
 
+use function trigger_error;
+
+use const E_NOTICE;
+
 /**
  * Class CustomFieldValueCollectionFactory
  *
@@ -38,7 +47,6 @@ class CustomFieldValueCollectionFactory
      * @param array $field
      *
      * @return BaseCustomFieldValueCollection
-     * @throws BadTypeException
      */
     public static function createCollection(array $field): BaseCustomFieldValueCollection
     {
@@ -105,10 +113,31 @@ class CustomFieldValueCollectionFactory
             case CustomFieldModel::TYPE_TRACKING_DATA:
                 $collection = new TrackingDataCustomFieldValueCollection();
                 break;
-        }
-
-        if (!isset($collection)) {
-            throw new BadTypeException('Unprocessable field type - ' . $fieldType);
+            case CustomFieldModel::TYPE_LINKED_ENTITY:
+                $collection = new LinkedEntityCustomFieldValueCollection();
+                break;
+            case CustomFieldModel::TYPE_MONETARY:
+                $collection = new MonetaryCustomFieldValueCollection();
+                break;
+            case CustomFieldModel::TYPE_CHAINED_LIST:
+                $collection = new ChainedListCustomFieldValueCollection();
+                break;
+            case CustomFieldModel::TYPE_FILE:
+                $collection = new FileCustomFieldValueCollection();
+                break;
+            case CustomFieldModel::TYPE_PAYER:
+                $collection = new PayerCustomFieldValueCollection();
+                break;
+            case CustomFieldModel::TYPE_SUPPLIER:
+                $collection = new SupplierCustomFieldValueCollection();
+                break;
+            default:
+                trigger_error(
+                    "Unprocessable field type '{$fieldType}'. Please upgrade amoCRM library.",
+                    E_USER_NOTICE
+                );
+                $collection = new BaseCustomFieldValueCollection();
+                break;
         }
 
         foreach ($field['values'] as $value) {

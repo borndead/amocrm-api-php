@@ -102,13 +102,13 @@ abstract class BaseEntity
         $collection = new $this->collectionClass();
         $entities = $this->getEntitiesFromResponse($response);
 
-        $collection = !empty($entities) ? $collection->fromArray($entities) : null;
+        $collection = !empty($entities) ? $collection::fromArray($entities) : null;
 
-        if (method_exists($collection, 'setNextPageLink') && isset($response['_links']['next']['href'])) {
+        if ($collection !== null && method_exists($collection, 'setNextPageLink') && isset($response['_links']['next']['href'])) {
             $collection->setNextPageLink($response['_links']['next']['href']);
         }
 
-        if (method_exists($collection, 'setPrevPageLink') && isset($response['_links']['prev']['href'])) {
+        if ($collection !== null && method_exists($collection, 'setPrevPageLink') && isset($response['_links']['prev']['href'])) {
             $collection->setPrevPageLink($response['_links']['prev']['href']);
         }
 
@@ -189,9 +189,8 @@ abstract class BaseEntity
     public function add(BaseApiCollection $collection): BaseApiCollection
     {
         $response = $this->request->post($this->getMethod(), $collection->toApi());
-        $collection = $this->processAdd($collection, $response);
 
-        return $collection;
+        return $this->processAdd($collection, $response);
     }
 
     /**

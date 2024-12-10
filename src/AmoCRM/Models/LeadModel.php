@@ -2,6 +2,8 @@
 
 namespace AmoCRM\Models;
 
+use AmoCRM\Models\Interfaces\ComplexTagsManagerInterface;
+use AmoCRM\Models\Traits\MutateTagsTrait;
 use AmoCRM\EntitiesServices\Unsorted;
 use AmoCRM\Exceptions\InvalidArgumentException;
 use AmoCRM\Helpers\EntityTypesInterface;
@@ -10,7 +12,9 @@ use AmoCRM\Collections\CatalogElementsCollection;
 use AmoCRM\Collections\ContactsCollection;
 use AmoCRM\Collections\CustomFieldsValuesCollection;
 use AmoCRM\Collections\TagsCollection;
+use AmoCRM\Models\CustomFieldsValues\BaseCustomFieldValuesModel;
 use AmoCRM\Models\Interfaces\CanBeLinkedInterface;
+use AmoCRM\Models\Interfaces\CanReturnDeletedInterface;
 use AmoCRM\Models\Interfaces\HasIdInterface;
 use AmoCRM\Models\Interfaces\TypeAwareInterface;
 use AmoCRM\Models\Leads\LossReasons\LossReasonModel;
@@ -20,12 +24,19 @@ use AmoCRM\Models\Unsorted\Interfaces\UnsortedMetadataInterface;
 
 use function is_null;
 
-class LeadModel extends BaseApiModel implements TypeAwareInterface, CanBeLinkedInterface, HasIdInterface
+class LeadModel extends BaseApiModel implements
+    TypeAwareInterface,
+    CanBeLinkedInterface,
+    HasIdInterface,
+    CanReturnDeletedInterface,
+    ComplexTagsManagerInterface
 {
     use RequestIdTrait;
     use GetLinkTrait;
+    use MutateTagsTrait;
 
     public const LOST_STATUS_ID = 143;
+    public const WON_STATUS_ID = 142;
     public const CATALOG_ELEMENTS = 'catalog_elements';
     public const IS_PRICE_BY_ROBOT = 'is_price_modified_by_robot';
     public const LOSS_REASON = 'loss_reason';
@@ -126,6 +137,11 @@ class LeadModel extends BaseApiModel implements TypeAwareInterface, CanBeLinkedI
      * @var int|null
      */
     protected $sourceId;
+
+    /**
+     * @var string|null
+     */
+    protected $sourceExternalId = null;
 
     /**
      * @var CustomFieldsValuesCollection|null
@@ -593,7 +609,7 @@ class LeadModel extends BaseApiModel implements TypeAwareInterface, CanBeLinkedI
     }
 
     /**
-     * @return CustomFieldsValuesCollection|null
+     * @return CustomFieldsValuesCollection|BaseCustomFieldValuesModel[]|null
      */
     public function getCustomFieldsValues(): ?CustomFieldsValuesCollection
     {
@@ -618,6 +634,17 @@ class LeadModel extends BaseApiModel implements TypeAwareInterface, CanBeLinkedI
     public function getContacts(): ?ContactsCollection
     {
         return $this->contacts;
+    }
+
+    /**
+     * @return ContactModel|null
+     */
+    public function getMainContact(): ?ContactModel
+    {
+        if ($this->contacts) {
+            return $this->contacts->getBy('isMain', true);
+        }
+        return null;
     }
 
     /**
@@ -912,6 +939,10 @@ class LeadModel extends BaseApiModel implements TypeAwareInterface, CanBeLinkedI
             $result['custom_fields_values'] = $this->getCustomFieldsValues()->toApi();
         }
 
+        if (!is_null($this->getTagsToAdd()) || !is_null($this->getTagsToDelete())) {
+            $result = $this->mutateTags($result);
+        }
+
         if (!is_null($this->getTags())) {
             $result[AmoCRMApiRequest::EMBEDDED]['tags'] = $this->getTags()->toEntityApi();
         }
@@ -933,6 +964,14 @@ class LeadModel extends BaseApiModel implements TypeAwareInterface, CanBeLinkedI
         if (is_null($this->getId()) && !is_null($this->getCompany())) {
             $result[AmoCRMApiRequest::EMBEDDED]['companies'][] = [
                 'id' => $this->getCompany()->getId()
+            ];
+        }
+
+        // Источник можно передать только при создании
+        if (is_null($this->getId()) && !is_null($this->getSourceExternalId())) {
+            $result[AmoCRMApiRequest::EMBEDDED]['source'] = [
+                'type' => 'widget',
+                'external_id' => $this->getSourceExternalId(),
             ];
         }
 
@@ -964,6 +1003,13 @@ class LeadModel extends BaseApiModel implements TypeAwareInterface, CanBeLinkedI
             $result[AmoCRMApiRequest::EMBEDDED]['metadata'] = $this->getMetadata()->toComplexApi();
         }
 
+        if (is_null($this->getId()) && !is_null($this->getSourceExternalId())) {
+            $result[AmoCRMApiRequest::EMBEDDED]['source'] = [
+                'type' => 'widget',
+                'external_id' => $this->getSourceExternalId(),
+            ];
+        }
+
         $result['request_id'] = $this->getRequestId();
 
         return $result;
@@ -980,6 +1026,7 @@ class LeadModel extends BaseApiModel implements TypeAwareInterface, CanBeLinkedI
             self::CONTACTS,
             self::SOURCE_ID,
             self::LOSS_REASON,
+            self::ONLY_DELETED,
         ];
     }
 
@@ -1092,6 +1139,26 @@ class LeadModel extends BaseApiModel implements TypeAwareInterface, CanBeLinkedI
     public function setIsMerged(bool $isMerged): LeadModel
     {
         $this->isMerged = $isMerged;
+
+        return $this;
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getSourceExternalId(): ?string
+    {
+        return $this->sourceExternalId;
+    }
+
+    /**
+     * @param string|null $sourceExternalId
+     *
+     * @return LeadModel
+     */
+    public function setSourceExternalId(?string $sourceExternalId): LeadModel
+    {
+        $this->sourceExternalId = $sourceExternalId;
 
         return $this;
     }

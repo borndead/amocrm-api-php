@@ -2,8 +2,13 @@
 
 namespace AmoCRM\Models\CustomFields\Factories;
 
-use AmoCRM\AmoCRM\Models\CustomFields\TrackingDataCustomFieldModel;
-use AmoCRM\Exceptions\BadTypeException;
+use AmoCRM\Models\CustomFields\PayerCustomFieldModel;
+use AmoCRM\Models\CustomFields\SupplierCustomFieldModel;
+use AmoCRM\Models\CustomFields\ChainedListCustomFieldModel;
+use AmoCRM\Models\CustomFields\FileCustomFieldModel;
+use AmoCRM\Models\CustomFields\MonetaryCustomFieldModel;
+use AmoCRM\Models\CustomFields\OrgLegalNameCustomFieldModel;
+use AmoCRM\Models\CustomFields\TrackingDataCustomFieldModel;
 use AmoCRM\Models\CustomFields\BirthdayCustomFieldModel;
 use AmoCRM\Models\CustomFields\CategoryCustomFieldModel;
 use AmoCRM\Models\CustomFields\CheckboxCustomFieldModel;
@@ -12,6 +17,7 @@ use AmoCRM\Models\CustomFields\DateCustomFieldModel;
 use AmoCRM\Models\CustomFields\DateTimeCustomFieldModel;
 use AmoCRM\Models\CustomFields\ItemsCustomFieldModel;
 use AmoCRM\Models\CustomFields\LegalEntityCustomFieldModel;
+use AmoCRM\Models\CustomFields\LinkedEntityCustomFieldModel;
 use AmoCRM\Models\CustomFields\MultiselectCustomFieldModel;
 use AmoCRM\Models\CustomFields\MultitextCustomFieldModel;
 use AmoCRM\Models\CustomFields\NumericCustomFieldModel;
@@ -24,6 +30,10 @@ use AmoCRM\Models\CustomFields\TextareaCustomFieldModel;
 use AmoCRM\Models\CustomFields\TextCustomFieldModel;
 use AmoCRM\Models\CustomFields\UrlCustomFieldModel;
 
+use function trigger_error;
+
+use const E_USER_NOTICE;
+
 /**
  * Class CustomFieldModelFactory
  *
@@ -35,7 +45,6 @@ class CustomFieldModelFactory
      * @param array $field
      *
      * @return CustomFieldModel
-     * @throws BadTypeException
      */
     public static function createModel(array $field): CustomFieldModel
     {
@@ -56,6 +65,9 @@ class CustomFieldModelFactory
                 break;
             case CustomFieldModel::TYPE_LEGAL_ENTITY:
                 $model = LegalEntityCustomFieldModel::fromArray($field);
+                break;
+            case CustomFieldModel::TYPE_ORG_LEGAL_NAME:
+                $model = OrgLegalNameCustomFieldModel::fromArray($field);
                 break;
             case CustomFieldModel::TYPE_MULTISELECT:
                 $model = MultiselectCustomFieldModel::fromArray($field);
@@ -99,10 +111,31 @@ class CustomFieldModelFactory
             case CustomFieldModel::TYPE_TRACKING_DATA:
                 $model = TrackingDataCustomFieldModel::fromArray($field);
                 break;
-        }
-
-        if (!isset($model)) {
-            throw new BadTypeException('Unprocessable field type - ' . $fieldType);
+            case CustomFieldModel::TYPE_LINKED_ENTITY:
+                $model = LinkedEntityCustomFieldModel::fromArray($field);
+                break;
+            case CustomFieldModel::TYPE_MONETARY:
+                $model = MonetaryCustomFieldModel::fromArray($field);
+                break;
+            case CustomFieldModel::TYPE_CHAINED_LIST:
+                $model = ChainedListCustomFieldModel::fromArray($field);
+                break;
+            case CustomFieldModel::TYPE_FILE:
+                $model = FileCustomFieldModel::fromArray($field);
+                break;
+            case CustomFieldModel::TYPE_PAYER:
+                $model = PayerCustomFieldModel::fromArray($field);
+                break;
+            case CustomFieldModel::TYPE_SUPPLIER:
+                $model = SupplierCustomFieldModel::fromArray($field);
+                break;
+            default:
+                trigger_error(
+                    "Unprocessable field type '{$fieldType}'. Please upgrade amoCRM library.",
+                    E_USER_NOTICE
+                );
+                $model = CustomFieldModel::fromArray($field);
+                break;
         }
 
         return $model;
@@ -112,7 +145,6 @@ class CustomFieldModelFactory
      * @param string $fieldType
      *
      * @return CustomFieldModel
-     * @throws BadTypeException
      */
     public static function createEmptyModel(string $fieldType): CustomFieldModel
     {
@@ -174,10 +206,25 @@ class CustomFieldModelFactory
             case CustomFieldModel::TYPE_TRACKING_DATA:
                 $model = new TrackingDataCustomFieldModel();
                 break;
-        }
-
-        if (!isset($model)) {
-            throw new BadTypeException('Unprocessable field type - ' . $fieldType);
+            case CustomFieldModel::TYPE_LINKED_ENTITY:
+                $model = new LinkedEntityCustomFieldModel();
+                break;
+            case CustomFieldModel::TYPE_MONETARY:
+                $model = new MonetaryCustomFieldModel();
+                break;
+            case CustomFieldModel::TYPE_CHAINED_LIST:
+                $model = new ChainedListCustomFieldModel();
+                break;
+            case CustomFieldModel::TYPE_FILE:
+                $model = new FileCustomFieldModel();
+                break;
+            default:
+                trigger_error(
+                    "Unprocessable field type '{$fieldType}'. Please upgrade amoCRM library.",
+                    E_USER_NOTICE
+                );
+                $model = new CustomFieldModel();
+                break;
         }
 
         return $model;

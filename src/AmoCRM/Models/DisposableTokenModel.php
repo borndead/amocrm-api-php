@@ -2,16 +2,15 @@
 
 declare(strict_types=1);
 
-namespace AmoCRM\AmoCRM\Models;
+namespace AmoCRM\Models;
 
-use AmoCRM\Models\BaseApiModel;
 use DateTimeImmutable;
 use Lcobucci\JWT\Token;
 
 /**
  * Class DisposableTokenModel
  *
- * @package AmoCRM\AmoCRM\Models
+ * @package AmoCRM\Models
  */
 class DisposableTokenModel extends BaseApiModel
 {
@@ -32,6 +31,9 @@ class DisposableTokenModel extends BaseApiModel
 
     /** @var int */
     protected $userId;
+
+    /** @var bool */
+    protected $isAdmin;
 
     /** @var int */
     protected $expiresAt;
@@ -157,6 +159,25 @@ class DisposableTokenModel extends BaseApiModel
     }
 
     /**
+     * @return bool
+     */
+    public function isAdmin(): bool
+    {
+        return $this->isAdmin;
+    }
+
+    /**
+     * @param bool $isAdmin
+     * @return DisposableTokenModel
+     */
+    public function setIsAdmin(bool $isAdmin): self
+    {
+        $this->isAdmin = $isAdmin;
+
+        return $this;
+    }
+
+    /**
      * @return int
      */
     public function getExpiresAt(): int
@@ -194,6 +215,7 @@ class DisposableTokenModel extends BaseApiModel
             ->setAccountSubdomain($claims->get('subdomain'))
             ->setAccountId((int)$claims->get('account_id'))
             ->setUserId((int)$claims->get('user_id'))
+            ->setIsAdmin((bool)$claims->get('is_admin'))
             ->setExpiresAt($expiresAt->getTimestamp());
 
         return $disposableToken;
@@ -211,6 +233,7 @@ class DisposableTokenModel extends BaseApiModel
             'account_subdomain' => $this->getAccountSubdomain(),
             'account_id'        => $this->getAccountId(),
             'user_id'           => $this->getUserId(),
+            'is_admin'          => $this->isAdmin(),
             'expires_at'        => $this->getExpiresAt(),
         ];
     }

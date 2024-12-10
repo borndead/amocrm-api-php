@@ -16,10 +16,11 @@ use function in_array;
  * @method null|BaseCustomFieldValuesModel last()
  * @method null|BaseCustomFieldValuesModel first()
  * @method null|BaseCustomFieldValuesModel offsetGet($offset)
- * @method CustomFieldsValuesCollection offsetSet($offset, BaseCustomFieldValuesModel $value)
+ * @method void offsetSet($offset, BaseCustomFieldValuesModel $value)
  * @method CustomFieldsValuesCollection prepend(BaseCustomFieldValuesModel $value)
  * @method CustomFieldsValuesCollection add(BaseCustomFieldValuesModel $value)
  * @method null|BaseCustomFieldValuesModel getBy($key, $value)
+ * @method static CustomFieldsValuesCollection fromArray(array $value)
  */
 class CustomFieldsValuesCollection extends BaseApiCollection
 {

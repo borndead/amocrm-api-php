@@ -7,6 +7,7 @@ use AmoCRM\Collections\TaskTypesCollection;
 use AmoCRM\Collections\UsersGroupsCollection;
 use AmoCRM\Models\AccountSettings\AmojoRights;
 use AmoCRM\Models\AccountSettings\DateTimeSettings;
+use AmoCRM\Models\AccountSettings\InvoicesSettings;
 
 class AccountModel extends BaseApiModel
 {
@@ -24,6 +25,12 @@ class AccountModel extends BaseApiModel
     public const VERSION = 'version';
     /** @var string Настройки форматов времени */
     public const DATETIME_SETTINGS = 'datetime_settings';
+    /** @var string Настройки для публичных счетов */
+    public const INVOICES_SETTINGS = 'invoices_settings';
+    /** @var string Доступ к фильтрации */
+    public const IS_API_FILTER_ENABLED = 'is_api_filter_enabled';
+    /** @var string Адрес драйва (сервис файлов) */
+    public const DRIVE_URL = 'drive_url';
 
     /** @var string Покупатели недоступны. */
     public const CUSTOMERS_MODE_UNAVAILABLE = 'unavailable';
@@ -61,16 +68,28 @@ class AccountModel extends BaseApiModel
     /** @var string */
     protected $name;
 
-    /** @var int */
+    /**
+     * @var int
+     * @deprecated
+     */
     protected $createdAt;
 
-    /** @var int */
+    /**
+     * @var int
+     * @deprecated
+     */
     protected $updatedAt;
 
-    /** @var int */
+    /**
+     * @var int
+     * @deprecated
+     */
     protected $updatedBy;
 
-    /** @var int */
+    /**
+     * @var int
+     * @deprecated
+     */
     protected $createdBy;
 
     /** @var string */
@@ -130,6 +149,15 @@ class AccountModel extends BaseApiModel
     /** @var bool */
     protected $isTechnicalAccount;
 
+    /** @var null|InvoicesSettings */
+    protected $invoicesSettings;
+
+    /** @var bool */
+    protected $isApiFilterEnabled;
+
+    /** @var null|string */
+    protected $driveUrl;
+
     /**
      * @return int
      */
@@ -173,6 +201,7 @@ class AccountModel extends BaseApiModel
 
     /**
      * @return null|int
+     * @deprecated
      */
     public function getCreatedBy(): ?int
     {
@@ -183,6 +212,7 @@ class AccountModel extends BaseApiModel
      * @param null|int $userId
      *
      * @return self
+     * @deprecated
      */
     public function setCreatedBy(?int $userId): self
     {
@@ -193,6 +223,7 @@ class AccountModel extends BaseApiModel
 
     /**
      * @return null|int
+     * @deprecated
      */
     public function getUpdatedBy(): ?int
     {
@@ -203,6 +234,7 @@ class AccountModel extends BaseApiModel
      * @param null|int $userId
      *
      * @return self
+     * @deprecated
      */
     public function setUpdatedBy(?int $userId): self
     {
@@ -213,6 +245,7 @@ class AccountModel extends BaseApiModel
 
     /**
      * @return int
+     * @deprecated
      */
     public function getCreatedAt(): int
     {
@@ -223,6 +256,7 @@ class AccountModel extends BaseApiModel
      * @param int $timestamp
      *
      * @return self
+     * @deprecated
      */
     public function setCreatedAt(int $timestamp): self
     {
@@ -233,6 +267,7 @@ class AccountModel extends BaseApiModel
 
     /**
      * @return int
+     * @deprecated
      */
     public function getUpdatedAt(): int
     {
@@ -243,6 +278,7 @@ class AccountModel extends BaseApiModel
      * @param int $timestamp
      *
      * @return self
+     * @deprecated
      */
     public function setUpdatedAt(int $timestamp): self
     {
@@ -287,6 +323,41 @@ class AccountModel extends BaseApiModel
         $this->amojoId = $id;
 
         return $this;
+    }
+
+    /**
+     * @return bool|null
+     */
+    public function getIsApiFilterEnabled(): ?bool
+    {
+        return $this->isApiFilterEnabled;
+    }
+
+    /**
+     * @param bool $is_enabled
+     * @return $this
+     */
+    public function setIsApiFilterEnabled(bool $is_enabled): self
+    {
+        $this->isApiFilterEnabled = $is_enabled;
+
+        return $this;
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getDriveUrl(): ?string
+    {
+        return $this->driveUrl;
+    }
+
+    /**
+     * @param string|null $driveUrl
+     */
+    public function setDriveUrl(?string $driveUrl): void
+    {
+        $this->driveUrl = $driveUrl;
     }
 
     /**
@@ -381,6 +452,21 @@ class AccountModel extends BaseApiModel
             $accountModel->setTaskTypes($collection);
         }
 
+        if (isset($account[self::INVOICES_SETTINGS])) {
+            $accountModel->setInvoicesSettings(new InvoicesSettings(
+                $account[self::INVOICES_SETTINGS]['lang'] ?? null,
+                $account[self::INVOICES_SETTINGS]['invoices_catalog_id'] ?? null
+            ));
+        }
+
+        if (isset($account[self::IS_API_FILTER_ENABLED])) {
+            $accountModel->setIsApiFilterEnabled($account[self::IS_API_FILTER_ENABLED]);
+        }
+
+        if (isset($account[self::DRIVE_URL])) {
+            $accountModel->setDriveUrl($account[self::DRIVE_URL]);
+        }
+
         return $accountModel;
     }
 
@@ -418,7 +504,7 @@ class AccountModel extends BaseApiModel
             $result['uuid'] = $this->getUuid();
         }
 
-        if (!is_null($this->getAmojoRights())) {
+        if ($this->getAmojoRights()) {
             $result['amojo_rights'] = $this->getAmojoRights()->toArray();
         }
 
@@ -436,6 +522,18 @@ class AccountModel extends BaseApiModel
 
         if (!is_null($this->getDatetimeSettings())) {
             $result['datetime_settings'] = $this->getDatetimeSettings();
+        }
+
+        if (!is_null($this->getInvoicesSettings())) {
+            $result['invoices_settings'] = $this->getInvoicesSettings();
+        }
+
+        if (!is_null($this->getIsApiFilterEnabled())) {
+            $result['is_api_filter_enabled'] = $this->getIsApiFilterEnabled();
+        }
+
+        if (!is_null($this->getDriveUrl())) {
+            $result['drive_url'] = $this->getDriveUrl();
         }
 
         return $result;
@@ -652,9 +750,9 @@ class AccountModel extends BaseApiModel
     }
 
     /**
-     * @return mixed
+     * @return int|null
      */
-    public function getCurrentUserId()
+    public function getCurrentUserId(): ?int
     {
         return $this->currentUserId;
     }
@@ -730,6 +828,25 @@ class AccountModel extends BaseApiModel
     }
 
     /**
+     * @return null|InvoicesSettings
+     */
+    public function getInvoicesSettings(): ?InvoicesSettings
+    {
+        return $this->invoicesSettings;
+    }
+
+    /**
+     * @param InvoicesSettings $invoicesSettings
+     * @return $this
+     */
+    public function setInvoicesSettings(InvoicesSettings $invoicesSettings): self
+    {
+        $this->invoicesSettings = $invoicesSettings;
+
+        return $this;
+    }
+
+    /**
      * @return bool
      */
     public function getIsTechnicalAccount(): bool
@@ -762,6 +879,9 @@ class AccountModel extends BaseApiModel
             self::TASK_TYPES,
             self::VERSION,
             self::DATETIME_SETTINGS,
+            self::INVOICES_SETTINGS,
+            self::IS_API_FILTER_ENABLED,
+            self::DRIVE_URL
         ];
     }
 

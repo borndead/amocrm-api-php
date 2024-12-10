@@ -2,10 +2,13 @@
 
 namespace AmoCRM\Models;
 
+use AmoCRM\Models\Interfaces\ComplexTagsManagerInterface;
+use AmoCRM\Models\Traits\MutateTagsTrait;
 use AmoCRM\Collections\SocialProfiles\SocialProfilesCollection;
 use AmoCRM\Exceptions\InvalidArgumentException;
 use AmoCRM\Helpers\EntityTypesInterface;
 use AmoCRM\Models\Interfaces\CanBeLinkedInterface;
+use AmoCRM\Models\Interfaces\CanReturnDeletedInterface;
 use AmoCRM\Models\Interfaces\HasIdInterface;
 use AmoCRM\Models\Interfaces\TypeAwareInterface;
 use AmoCRM\Models\Traits\GetLinkTrait;
@@ -19,10 +22,16 @@ use AmoCRM\Models\Traits\RequestIdTrait;
 
 use function is_null;
 
-class ContactModel extends BaseApiModel implements TypeAwareInterface, CanBeLinkedInterface, HasIdInterface
+class ContactModel extends BaseApiModel implements
+    TypeAwareInterface,
+    CanBeLinkedInterface,
+    HasIdInterface,
+    CanReturnDeletedInterface,
+    ComplexTagsManagerInterface
 {
     use RequestIdTrait;
     use GetLinkTrait;
+    use MutateTagsTrait;
 
     public const LEADS = 'leads';
     public const CUSTOMERS = 'customers';
@@ -128,6 +137,11 @@ class ContactModel extends BaseApiModel implements TypeAwareInterface, CanBeLink
      * @var SocialProfilesCollection|null
      */
     protected $socialProfiles = null;
+
+    /**
+     * @var bool
+     */
+    protected $isUnsorted = false;
 
     public function getType(): string
     {
@@ -569,6 +583,10 @@ class ContactModel extends BaseApiModel implements TypeAwareInterface, CanBeLink
             $contactModel->setClosestTaskAt($contact['closest_task_at'] > 0 ? (int)$contact['closest_task_at'] : null);
         }
 
+        if (!empty($contact['is_unsorted'])) {
+            $contactModel->setIsUnsorted((bool)$contact['is_unsorted']);
+        }
+
         if (!empty($contact[AmoCRMApiRequest::EMBEDDED]['tags'])) {
             $tagsCollection = new TagsCollection();
             $tagsCollection = $tagsCollection->fromArray($contact[AmoCRMApiRequest::EMBEDDED]['tags']);
@@ -627,6 +645,7 @@ class ContactModel extends BaseApiModel implements TypeAwareInterface, CanBeLink
                 ? null
                 : $this->getCustomFieldsValues()->toArray(),
             'account_id' => $this->getAccountId(),
+            'is_unsorted' => $this->isUnsorted(),
         ];
 
         if (!is_null($this->getId())) {
@@ -700,6 +719,10 @@ class ContactModel extends BaseApiModel implements TypeAwareInterface, CanBeLink
             $result['custom_fields_values'] = $this->getCustomFieldsValues()->toApi();
         }
 
+        if (!is_null($this->getTagsToAdd()) || !is_null($this->getTagsToDelete())) {
+            $result = $this->mutateTags($result);
+        }
+
         if (!is_null($this->getTags())) {
             $result[AmoCRMApiRequest::EMBEDDED]['tags'] = $this->getTags()->toEntityApi();
         }
@@ -742,6 +765,7 @@ class ContactModel extends BaseApiModel implements TypeAwareInterface, CanBeLink
             self::CUSTOMERS,
             self::CATALOG_ELEMENTS,
             self::SOCIAL_PROFILES,
+            self::ONLY_DELETED,
         ];
     }
 
@@ -760,6 +784,25 @@ class ContactModel extends BaseApiModel implements TypeAwareInterface, CanBeLink
     public function setIsMain(?bool $isMain): self
     {
         $this->isMain = $isMain;
+
+        return $this;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isUnsorted(): bool
+    {
+        return $this->isUnsorted;
+    }
+
+    /**
+     * @param bool $isUnsorted
+     * @return ContactModel
+     */
+    public function setIsUnsorted(bool $isUnsorted): ContactModel
+    {
+        $this->isUnsorted = $isUnsorted;
 
         return $this;
     }

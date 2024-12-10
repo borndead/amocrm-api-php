@@ -13,10 +13,11 @@ use AmoCRM\Models\AccountSettings\TaskType;
  * @method null|TaskType last()
  * @method null|TaskType first()
  * @method null|TaskType offsetGet($offset)
- * @method TaskTypesCollection offsetSet($offset, TaskType $value)
+ * @method void offsetSet($offset, TaskType $value)
  * @method TaskTypesCollection prepend(TaskType $value)
  * @method TaskTypesCollection add(TaskType $value)
  * @method null|TaskType getBy($key, $value)
+ * @method TaskTypesCollection fromArray($array)
  */
 class TaskTypesCollection extends BaseApiCollection
 {

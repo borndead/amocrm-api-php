@@ -2,6 +2,8 @@
 
 namespace AmoCRM\Models\Customers;
 
+use AmoCRM\Models\Interfaces\ComplexTagsManagerInterface;
+use AmoCRM\Models\Traits\MutateTagsTrait;
 use AmoCRM\Exceptions\InvalidArgumentException;
 use AmoCRM\Helpers\EntityTypesInterface;
 use AmoCRM\Models\Interfaces\CanBeLinkedInterface;
@@ -26,14 +28,20 @@ use function array_key_exists;
  *
  * @package AmoCRM\Models\Customers
  */
-class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLinkedInterface, HasIdInterface
+class CustomerModel extends BaseApiModel implements
+    TypeAwareInterface,
+    CanBeLinkedInterface,
+    HasIdInterface,
+    ComplexTagsManagerInterface
 {
     use GetLinkTrait;
     use RequestIdTrait;
+    use MutateTagsTrait;
 
     public const CATALOG_ELEMENTS = 'catalog_elements';
     public const CONTACTS = 'contacts';
     public const COMPANIES = 'companies';
+    public const GROUP_ID = 'group_id';
 
     /**
      * @var int
@@ -150,6 +158,9 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      */
     protected $catalogElementsLinks = null;
 
+    /** @var int|null */
+    protected $groupId = null;
+
     public function getType(): string
     {
         return EntityTypesInterface::CUSTOMERS;
@@ -188,7 +199,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      *
      * @return self
      */
-    public function setName(string $name): self
+    public function setName(?string $name): self
     {
         $this->name = $name;
 
@@ -208,7 +219,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      *
      * @return self
      */
-    public function setAccountId(int $id): self
+    public function setAccountId(?int $id): self
     {
         $this->accountId = $id;
 
@@ -228,7 +239,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      *
      * @return self
      */
-    public function setResponsibleUserId(int $userId): self
+    public function setResponsibleUserId(?int $userId): self
     {
         $this->responsibleUserId = $userId;
 
@@ -248,7 +259,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      *
      * @return self
      */
-    public function setCreatedBy(int $userId): self
+    public function setCreatedBy(?int $userId): self
     {
         $this->createdBy = $userId;
 
@@ -268,7 +279,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      *
      * @return self
      */
-    public function setUpdatedBy(int $userId): self
+    public function setUpdatedBy(?int $userId): self
     {
         $this->updatedBy = $userId;
 
@@ -288,7 +299,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      *
      * @return self
      */
-    public function setCreatedAt(int $timestamp): self
+    public function setCreatedAt(?int $timestamp): self
     {
         $this->createdAt = $timestamp;
 
@@ -308,7 +319,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      *
      * @return self
      */
-    public function setUpdatedAt(int $timestamp): self
+    public function setUpdatedAt(?int $timestamp): self
     {
         $this->updatedAt = $timestamp;
 
@@ -328,7 +339,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      *
      * @return self
      */
-    public function setStatusId(int $statusId): self
+    public function setStatusId(?int $statusId): self
     {
         $this->statusId = $statusId;
 
@@ -368,7 +379,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      *
      * @return self
      */
-    public function setIsDeleted(bool $flag): self
+    public function setIsDeleted(?bool $flag): self
     {
         $this->isDeleted = $flag;
 
@@ -408,7 +419,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      *
      * @return self
      */
-    public function setCompany(CompanyModel $company): self
+    public function setCompany(?CompanyModel $company): self
     {
         $this->company = $company;
 
@@ -448,7 +459,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      *
      * @return self
      */
-    public function setContacts(ContactsCollection $contacts): self
+    public function setContacts(?ContactsCollection $contacts): self
     {
         $this->contacts = $contacts;
 
@@ -595,6 +606,15 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
         return $this;
     }
 
+    public function getGroupId(): ?int
+    {
+        return $this->groupId;
+    }
+
+    public function setGroupId(?int $groupId): void
+    {
+        $this->groupId = $groupId;
+    }
 
     /**
      * @param array $customer
@@ -708,6 +728,10 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
             $customerModel->setAccountId((int)$customer['account_id']);
         }
 
+        if (array_key_exists('group_id', $customer) && !is_null($customer['group_id'])) {
+            $customerModel->setGroupId((int)$customer['group_id']);
+        }
+
         return $customerModel;
     }
 
@@ -757,6 +781,10 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
 
         if (!is_null($this->getSegments())) {
             $result['segments'] = $this->getSegments()->toArray();
+        }
+
+        if (!is_null($this->getGroupId())) {
+            $result['group_id'] = $this->getGroupId();
         }
 
         return $result;
@@ -814,6 +842,10 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
             $result['custom_fields_values'] = $this->getCustomFieldsValues()->toApi();
         }
 
+        if (!is_null($this->getTagsToAdd()) || !is_null($this->getTagsToDelete())) {
+            $result = $this->mutateTags($result);
+        }
+
         if (!is_null($this->getTags())) {
             $result[AmoCRMApiRequest::EMBEDDED]['tags'] = $this->getTags()->toEntityApi();
         }
@@ -840,6 +872,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
             self::CATALOG_ELEMENTS,
             self::COMPANIES,
             self::CONTACTS,
+            self::GROUP_ID,
         ];
     }
 
@@ -855,7 +888,7 @@ class CustomerModel extends BaseApiModel implements TypeAwareInterface, CanBeLin
      * @param CatalogElementsCollection|null $catalogElementsLinks
      * @return CustomerModel
      */
-    public function setCatalogElementsLinks(CatalogElementsCollection $catalogElementsLinks): self
+    public function setCatalogElementsLinks(?CatalogElementsCollection $catalogElementsLinks): self
     {
         $this->catalogElementsLinks = $catalogElementsLinks;
 

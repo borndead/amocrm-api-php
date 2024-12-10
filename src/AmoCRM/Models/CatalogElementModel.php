@@ -2,6 +2,7 @@
 
 namespace AmoCRM\Models;
 
+use AmoCRM\Client\AmoCRMApiRequest;
 use AmoCRM\Exceptions\InvalidArgumentException;
 use AmoCRM\Helpers\EntityTypesInterface;
 use AmoCRM\Models\Interfaces\CanBeLinkedInterface;
@@ -18,6 +19,15 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
     use RequestIdTrait;
     use GetLinkTrait;
 
+    /** @var string Ссылка на печатную форму счета с возможностью оплаты */
+    public const INVOICE_LINK = 'invoice_link';
+
+    /**
+     * @var string Заполненные значения для кастомных полей с типом "Поставщик".
+     * Актуально только для каталогов счетов/покупок, в других каталогах такого поля нет.
+     */
+    public const SUPPLIER_FIELD_VALUES = 'supplier_field_values';
+
     /**
      * @var int|null
      */
@@ -27,6 +37,11 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
      * @var null|string
      */
     protected $name;
+
+    /**
+     * @var null|int
+     */
+    protected $currencyId;
 
     /**
      * @var int
@@ -54,6 +69,11 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
     protected $updatedAt;
 
     /**
+     * @var bool
+     */
+    protected $needUpdateUpdatedAt = false;
+
+    /**
      * @var CustomFieldsValuesCollection|null
      */
     protected $customFieldsValues;
@@ -69,9 +89,30 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
     protected $quantity;
 
     /**
+     * ID поля типа цена, используется в метаданных при привязке к сущности
+     *
+     * @var int|null
+     */
+    protected $priceId;
+
+    /**
      * @var int|null
      */
     protected $accountId;
+
+    /**
+     * Доступен только в каталоге счетов
+     *
+     * @var string|null
+     */
+    protected $invoiceLink;
+
+    /**
+     * Предупреждение о перерасчете в счете
+     *
+     * @var InvoiceWarningModel|null
+     */
+    protected $invoiceWarning;
 
     /**
      * @return null|int
@@ -111,6 +152,26 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
         $this->name = $name;
 
         return $this;
+    }
+
+    /**
+     * @param int|null $currencyId
+     *
+     * @return self
+     */
+    public function setCurrencyId(?int $currencyId): self
+    {
+        $this->currencyId = $currencyId;
+
+        return $this;
+    }
+
+    /**
+     * @return int|null
+     */
+    public function getCurrencyId(): ?int
+    {
+        return $this->currencyId;
     }
 
     /**
@@ -209,6 +270,7 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
     public function setUpdatedAt(?int $timestamp): self
     {
         $this->updatedAt = $timestamp;
+        $this->needUpdateUpdatedAt = true;
 
         return $this;
     }
@@ -279,6 +341,46 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
     }
 
     /**
+     * @return string|null
+     */
+    public function getInvoiceLink(): ?string
+    {
+        return $this->invoiceLink;
+    }
+
+    /**
+     * @param string|null $invoiceLink
+     *
+     * @return CatalogElementModel
+     */
+    public function setInvoiceLink(?string $invoiceLink): CatalogElementModel
+    {
+        $this->invoiceLink = $invoiceLink;
+
+        return $this;
+    }
+
+    /**
+     * @return InvoiceWarningModel|null
+     */
+    public function getInvoiceWarning(): ?InvoiceWarningModel
+    {
+        return $this->invoiceWarning;
+    }
+
+    /**
+     * @param InvoiceWarningModel $invoiceWarning
+     *
+     * @return CatalogElementModel
+     */
+    private function setInvoiceWarning(InvoiceWarningModel $invoiceWarning): CatalogElementModel
+    {
+        $this->invoiceWarning = $invoiceWarning;
+
+        return $this;
+    }
+
+    /**
      * @param array $catalogElement
      *
      * @return self
@@ -303,6 +405,9 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
         if (array_key_exists('updated_by', $catalogElement) && !is_null($catalogElement['updated_by'])) {
             $catalogElementModel->setUpdatedBy((int)$catalogElement['updated_by']);
         }
+        if (array_key_exists('currency_id', $catalogElement) && !is_null($catalogElement['currency_id'])) {
+            $catalogElementModel->setCurrencyId((int)$catalogElement['currency_id']);
+        }
         if (!empty($catalogElement['created_at'])) {
             $catalogElementModel->setCreatedAt($catalogElement['created_at']);
         }
@@ -315,10 +420,21 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
         if (array_key_exists('is_deleted', $catalogElement) && !is_null($catalogElement['is_deleted'])) {
             $catalogElementModel->setIsDeleted($catalogElement['is_deleted']);
         }
+
+        if (array_key_exists('invoice_link', $catalogElement) && !is_null($catalogElement['invoice_link'])) {
+            $catalogElementModel->setInvoiceLink($catalogElement['invoice_link']);
+        }
         if (!empty($catalogElement['custom_fields_values'])) {
             $valuesCollection = new CustomFieldsValuesCollection();
-            $customFieldsValues = $valuesCollection->fromArray($catalogElement['custom_fields_values']);
+            $customFieldsValues = $valuesCollection::fromArray($catalogElement['custom_fields_values']);
             $catalogElementModel->setCustomFieldsValues($customFieldsValues);
+        }
+        if (
+            array_key_exists(AmoCRMApiRequest::EMBEDDED, $catalogElement)
+            && array_key_exists('warning', $catalogElement[AmoCRMApiRequest::EMBEDDED])
+        ) {
+            $invoiceWarning = InvoiceWarningModel::fromArray($catalogElement[AmoCRMApiRequest::EMBEDDED]['warning']);
+            $catalogElementModel->setInvoiceWarning($invoiceWarning);
         }
 
         //Костылик для связей
@@ -327,6 +443,9 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
         }
         if (isset($catalogElement['metadata']['quantity'])) {
             $catalogElementModel->setQuantity($catalogElement['metadata']['quantity']);
+        }
+        if (isset($catalogElement['metadata']['price_id'])) {
+            $catalogElementModel->setPriceId($catalogElement['metadata']['price_id']);
         }
         if (isset($catalogElement['metadata']['catalog_id'])) {
             $catalogElementModel->setCatalogId($catalogElement['metadata']['catalog_id']);
@@ -344,7 +463,7 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
      */
     public function toArray(): array
     {
-        return [
+        $result = [
             'id'   => $this->getId(),
             'name' => $this->getName(),
             'created_by' => $this->getCreatedBy(),
@@ -357,11 +476,23 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
                 ? null
                 : $this->getCustomFieldsValues()->toArray(),
             'account_id' => $this->getAccountId(),
+            'invoice_link' => $this->getInvoiceLink(),
             'metadata'   => [
-                'quantity'   => $this->getQuantity(),
-                'catalog_id'   => $this->getCatalogId(),
-            ]
+                'quantity' => $this->getQuantity(),
+                'catalog_id' => $this->getCatalogId(),
+                'price_id' => $this->getPriceId(),
+            ],
+            'warning' => $this->getInvoiceWarning() === null
+                ? null
+                : $this->getInvoiceWarning()->toArray(),
+
         ];
+
+        if (!is_null($this->getCurrencyId())) {
+            $result['currency_id'] = $this->getCurrencyId();
+        }
+
+        return $result;
     }
 
     public function toApi(?string $requestId = "0"): array
@@ -370,6 +501,10 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
 
         if (!is_null($this->getId())) {
             $result['id'] = $this->getId();
+        }
+
+        if (!is_null($this->getCurrencyId())) {
+            $result['currency_id'] = $this->getCurrencyId();
         }
 
         if (!is_null($this->getName())) {
@@ -388,11 +523,15 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
             $result['created_at'] = $this->getCreatedAt();
         }
 
+        if ($this->needUpdateUpdatedAt && !is_null($this->getUpdatedAt())) {
+            $result['updated_at'] = $this->getUpdatedAt();
+        }
+
         if (!is_null($this->getCustomFieldsValues())) {
             $result['custom_fields_values'] = $this->getCustomFieldsValues()->toApi();
         }
 
-        if (is_null($this->getRequestId()) && !is_null($requestId)) {
+        if (!is_null($requestId) && is_null($this->getRequestId())) {
             $this->setRequestId($requestId);
         }
 
@@ -402,20 +541,46 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
     }
 
     /**
-     * @return int|null
+     * @return int|float|null
      */
-    public function getQuantity(): ?int
+    public function getQuantity()
     {
         return $this->quantity;
     }
 
     /**
-     * @param int $quantity
+     * @param int|float $quantity
+     *
+     * @return CatalogElementModel
+     * @throws InvalidArgumentException
+     */
+    public function setQuantity($quantity): CatalogElementModel
+    {
+        if (!is_int($quantity) && !is_float($quantity)) {
+            throw new InvalidArgumentException('Quantity must be integer or float number');
+        }
+
+        $this->quantity = $quantity;
+
+        return $this;
+    }
+
+    /**
+     * @return int|null
+     */
+    public function getPriceId(): ?int
+    {
+        return $this->priceId;
+    }
+
+    /**
+     * @param int|null $priceId
+     *
      * @return CatalogElementModel
      */
-    public function setQuantity(int $quantity): CatalogElementModel
+    public function setPriceId(?int $priceId): CatalogElementModel
     {
-        $this->quantity = $quantity;
+        $this->priceId = $priceId;
 
         return $this;
     }
@@ -435,10 +600,23 @@ class CatalogElementModel extends BaseApiModel implements TypeAwareInterface, Ca
             $result['quantity'] = $this->getQuantity();
         }
 
+        $result['price_id'] = $this->getPriceId();
+
         if (!is_null($this->getCatalogId())) {
             $result['catalog_id'] = $this->getCatalogId();
         }
 
         return $result;
+    }
+
+    /**
+     * @return array
+     */
+    public static function getAvailableWith(): array
+    {
+        return [
+            self::INVOICE_LINK,
+            self::SUPPLIER_FIELD_VALUES,
+        ];
     }
 }

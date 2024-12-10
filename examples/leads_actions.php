@@ -9,11 +9,14 @@ use AmoCRM\Exceptions\AmoCRMApiException;
 use AmoCRM\Filters\LeadsFilter;
 use AmoCRM\Models\CompanyModel;
 use AmoCRM\Models\ContactModel;
+use AmoCRM\Models\CustomFieldsValues\BirthdayCustomFieldValuesModel;
+use AmoCRM\Models\CustomFieldsValues\DateTimeCustomFieldValuesModel;
 use AmoCRM\Models\CustomFieldsValues\TextCustomFieldValuesModel;
 use AmoCRM\Models\CustomFieldsValues\ValueCollections\NullCustomFieldValueCollection;
 use AmoCRM\Models\CustomFieldsValues\ValueCollections\TextCustomFieldValueCollection;
 use AmoCRM\Models\CustomFieldsValues\ValueModels\TextCustomFieldValueModel;
 use AmoCRM\Models\LeadModel;
+use Carbon\Carbon;
 use League\OAuth2\Client\Token\AccessTokenInterface;
 
 include_once __DIR__ . '/bootstrap.php';
@@ -47,7 +50,7 @@ try {
     die;
 }
 
-//Создадим сделку с заполненым бюджетом и привязанными контактами и компанией
+//Создадим сделку с заполненным бюджетом и привязанными контактами и компанией
 $lead = new LeadModel();
 $lead->setName('Название сделки')
     ->setPrice(54321)
@@ -68,6 +71,16 @@ $lead->setName('Название сделки')
             ->setId(19187743)
     );
 
+$tagsToAdd = [
+    0 => [
+        'name' => 'Тег 123',
+    ],
+    1 => [
+        'name' => 'Тег 456'
+    ]
+];
+$lead->setTagsToAdd($tagsToAdd);
+
 $leadsCollection = new LeadsCollection();
 $leadsCollection->add($lead);
 
@@ -78,7 +91,7 @@ try {
     die;
 }
 
-//Создадим сделку с заполненым полем типа текст
+//Создадим сделку с заполненным полем типа текст
 $lead = new LeadModel();
 $leadCustomFieldsValues = new CustomFieldsValuesCollection();
 $textCustomFieldValueModel = new TextCustomFieldValuesModel();
@@ -139,8 +152,12 @@ foreach ($leads as $lead) {
     //Получим значение поля по его ID
     if (!empty($customFields)) {
         $textField = $customFields->getBy('fieldId', 269303);
-        $textFieldValueCollection = $textField->getValues();
-    } else {
+        if ($textField) {
+            $textFieldValueCollection = $textField->getValues();
+        }
+    }
+
+    if (empty($textFieldValueCollection)) {
         //Если полей нет
         $customFields = new CustomFieldsValuesCollection();
         $textField = (new TextCustomFieldValuesModel())->setFieldId(269303);
@@ -157,9 +174,30 @@ foreach ($leads as $lead) {
     );
 
     //Или удалим значение поля
-    $textField->setValues(
-        (new NullCustomFieldValueCollection())
-    );
+    //$textField->setValues(
+    //    (new NullCustomFieldValueCollection())
+    //);
+
+    //Ниже зададим/обновим значения для полей типа дата-время и день рождения
+    foreach ($customFields as $customFieldValues) {
+        if (
+            $customFieldValues instanceof DateTimeCustomFieldValuesModel
+            || $customFieldValues instanceof BirthdayCustomFieldValuesModel
+        ) {
+            $customFieldValue = $customFieldValues->getValues()->first();
+            /** @var Carbon|null $value */
+            $value = $customFieldValue->getValue();
+            if ($value) {
+                if ($customFieldValues instanceof DateTimeCustomFieldValuesModel) {
+                    //Если поле дата/время, укажем завтрашний день
+                    $customFieldValue->setValue(new Carbon('tomorrow'));
+                } else {
+                    //Если поле заполнено, добавим 100 дней
+                    $value->addYears(50);
+                }
+            }
+        }
+    }
 
     $lead->setCustomFieldsValues($customFields);
 
@@ -205,3 +243,41 @@ if ($lead->getCatalogElementsLinks()) {
 
     var_dump($syncedElement);
 }
+
+// Рассмотрим кейс создания источника и создания сделки с этим источником
+// ID источника на вашей стороне
+$sourceExternalId = 'my-integration-super-id';
+// Создадим источник
+$source = new \AmoCRM\Models\SourceModel();
+$source->setName('My super source')
+    ->setExternalId($sourceExternalId)
+    ->setPipelineId(4913583);
+
+$sourcesService = $apiClient->sources();
+
+try {
+    $source = $sourcesService->addOne($source);
+} catch (AmoCRMApiException $e) {
+    printError($e);
+    die;
+}
+echo 'Added source: ';
+var_dump($source->toArray());
+echo PHP_EOL;
+
+
+$lead = new LeadModel();
+$lead->setName('Название сделки')
+    ->setPrice(54321)
+    ->setSourceExternalId($sourceExternalId);
+
+try {
+    $lead = $leadsService->addOne($lead);
+} catch (AmoCRMApiException $e) {
+    printError($e);
+    die;
+}
+
+echo 'Added lead: ';
+var_dump($lead->toArray());
+echo PHP_EOL;
